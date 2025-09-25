@@ -8,6 +8,9 @@ import { Package, Users, ShoppingCart, AlertTriangle, Plus, Edit, Trash2, Histor
 import { localStorageService, Product, Category, Supplier, HistoryEntry } from '@/services/localStorageService';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
+import ProductForm from '@/components/ProductForm';
+import CategoryForm from '@/components/CategoryForm';
+import SupplierForm from '@/components/SupplierForm';
 
 export default function AdminDashboard() {
   const { isAdmin } = useAuth();
@@ -17,6 +20,14 @@ export default function AdminDashboard() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
+  
+  // Form states
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [showSupplierForm, setShowSupplierForm] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | undefined>();
+  const [editingCategory, setEditingCategory] = useState<Category | undefined>();
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | undefined>();
 
   useEffect(() => {
     if (!isAdmin) {
@@ -69,6 +80,36 @@ export default function AdminDashboard() {
         description: "Supplier has been removed successfully.",
       });
     }
+  };
+
+  const handleEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setShowProductForm(true);
+  };
+
+  const handleEditCategory = (category: Category) => {
+    setEditingCategory(category);
+    setShowCategoryForm(true);
+  };
+
+  const handleEditSupplier = (supplier: Supplier) => {
+    setEditingSupplier(supplier);
+    setShowSupplierForm(true);
+  };
+
+  const handleCloseProductForm = () => {
+    setShowProductForm(false);
+    setEditingProduct(undefined);
+  };
+
+  const handleCloseCategoryForm = () => {
+    setShowCategoryForm(false);
+    setEditingCategory(undefined);
+  };
+
+  const handleCloseSupplierForm = () => {
+    setShowSupplierForm(false);
+    setEditingSupplier(undefined);
   };
 
   if (!isAdmin) {
@@ -154,7 +195,7 @@ export default function AdminDashboard() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Manage Products</CardTitle>
-                <Button>
+                <Button onClick={() => setShowProductForm(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Product
                 </Button>
@@ -173,7 +214,7 @@ export default function AdminDashboard() {
                           Stock: {product.stock}
                         </Badge>
                         <div className="flex space-x-2">
-                          <Button size="sm" variant="outline">
+                          <Button size="sm" variant="outline" onClick={() => handleEditProduct(product)}>
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button 
@@ -196,7 +237,7 @@ export default function AdminDashboard() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Manage Categories</CardTitle>
-                <Button>
+                <Button onClick={() => setShowCategoryForm(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Category
                 </Button>
@@ -210,7 +251,7 @@ export default function AdminDashboard() {
                         <p className="text-sm text-muted-foreground">{category.description}</p>
                       </div>
                       <div className="flex space-x-2">
-                        <Button size="sm" variant="outline">
+                        <Button size="sm" variant="outline" onClick={() => handleEditCategory(category)}>
                           <Edit className="h-4 w-4" />
                         </Button>
                         <Button 
@@ -232,7 +273,7 @@ export default function AdminDashboard() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Manage Suppliers</CardTitle>
-                <Button>
+                <Button onClick={() => setShowSupplierForm(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Supplier
                 </Button>
@@ -247,7 +288,7 @@ export default function AdminDashboard() {
                         <p className="text-sm text-muted-foreground">{supplier.address}</p>
                       </div>
                       <div className="flex space-x-2">
-                        <Button size="sm" variant="outline">
+                        <Button size="sm" variant="outline" onClick={() => handleEditSupplier(supplier)}>
                           <Edit className="h-4 w-4" />
                         </Button>
                         <Button 
@@ -302,6 +343,28 @@ export default function AdminDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Form Dialogs */}
+      <ProductForm
+        isOpen={showProductForm}
+        onClose={handleCloseProductForm}
+        product={editingProduct}
+        onSave={loadData}
+      />
+      
+      <CategoryForm
+        isOpen={showCategoryForm}
+        onClose={handleCloseCategoryForm}
+        category={editingCategory}
+        onSave={loadData}
+      />
+      
+      <SupplierForm
+        isOpen={showSupplierForm}
+        onClose={handleCloseSupplierForm}
+        supplier={editingSupplier}
+        onSave={loadData}
+      />
     </div>
   );
 }
