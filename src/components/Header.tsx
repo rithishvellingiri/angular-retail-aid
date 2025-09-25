@@ -55,13 +55,21 @@ export const Header: React.FC = () => {
             <Link to="/products">Products</Link>
           </Button>
 
+          <Button
+            variant={isActive('/store-dashboard') ? 'default' : 'ghost'}
+            asChild
+            size="sm"
+          >
+            <Link to="/store-dashboard">Store Info</Link>
+          </Button>
+
           {isAuthenticated && !isAdmin && (
             <Button
-              variant={isActive('/cart') ? 'default' : 'ghost'}
+              variant={isActive('/checkout') ? 'default' : 'ghost'}
               asChild
               size="sm"
             >
-              <Link to="/cart" className="relative">
+              <Link to="/checkout" className="relative">
                 <ShoppingCart className="h-4 w-4 mr-2" />
                 Cart
               </Link>
@@ -135,15 +143,15 @@ export const Header: React.FC = () => {
                 ) : (
                   <>
                     <DropdownMenuItem asChild>
-                      <Link to="/dashboard" className="cursor-pointer">
+                      <Link to="/user-dashboard" className="cursor-pointer">
                         <User className="h-4 w-4 mr-2" />
                         My Dashboard
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link to="/orders" className="cursor-pointer">
-                        <Package className="h-4 w-4 mr-2" />
-                        My Orders
+                      <Link to="/checkout" className="cursor-pointer">
+                        <ShoppingCart className="h-4 w-4 mr-2" />
+                        My Cart
                       </Link>
                     </DropdownMenuItem>
                   </>

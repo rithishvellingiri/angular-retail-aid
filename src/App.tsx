@@ -8,6 +8,11 @@ import { Header } from "@/components/Header";
 import { Home } from "@/pages/Home";
 import { Login } from "@/pages/Login";
 import { Register } from "@/pages/Register";
+import Products from "@/pages/Products";
+import Checkout from "@/pages/Checkout";
+import UserDashboard from "@/pages/UserDashboard";
+import AdminDashboard from "@/pages/AdminDashboard";
+import StoreDashboard from "@/pages/StoreDashboard";
 import { localStorageService } from "@/services/localStorageService";
 import { useEffect } from "react";
 import NotFound from "./pages/NotFound";
@@ -34,7 +39,11 @@ const App = () => {
                   <Route path="/" element={<Home />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
-                  {/* More routes will be added here */}
+                  <Route path="/products" element={<Products />} />
+                  <Route path="/checkout" element={<Checkout />} />
+                  <Route path="/user-dashboard" element={<UserDashboard />} />
+                  <Route path="/admin" element={<AdminDashboard />} />
+                  <Route path="/store-dashboard" element={<StoreDashboard />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </main>
