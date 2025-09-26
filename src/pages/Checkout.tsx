@@ -10,12 +10,15 @@ import { toast } from '@/hooks/use-toast';
 import { PaymentService } from '@/services/paymentService';
 
 export default function Checkout() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // Wait for auth to load before redirecting
+    if (authLoading) return;
+    
     if (!isAuthenticated) {
       window.location.href = '/login';
       return;
@@ -26,7 +29,7 @@ export default function Checkout() {
     if (user) {
       setCart(localStorageService.getCart(user.id));
     }
-  }, [user, isAuthenticated]);
+  }, [user, isAuthenticated, authLoading]);
 
   const getCartWithProducts = () => {
     return cart.map(item => {
@@ -184,6 +187,18 @@ export default function Checkout() {
   };
 
   const cartWithProducts = getCartWithProducts();
+
+  // Show loading while auth is being checked
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return null;
