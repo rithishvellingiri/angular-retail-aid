@@ -77,29 +77,17 @@ export const Header: React.FC = () => {
           )}
 
           {isAdmin && (
-            <>
-              <Button
-                variant={isActive('/admin') ? 'default' : 'ghost'}
-                asChild
-                size="sm"
-                className="text-admin"
-              >
-                <Link to="/admin">
-                  <Shield className="h-4 w-4 mr-2" />
-                  Admin
-                </Link>
-              </Button>
-              <Button
-                variant={isActive('/admin/products') ? 'default' : 'ghost'}
-                asChild
-                size="sm"
-              >
-                <Link to="/admin/products">
-                  <Package className="h-4 w-4 mr-2" />
-                  Manage
-                </Link>
-              </Button>
-            </>
+            <Button
+              variant={isActive('/admin') ? 'default' : 'ghost'}
+              asChild
+              size="sm"
+              className="text-admin"
+            >
+              <Link to="/admin">
+                <Shield className="h-4 w-4 mr-2" />
+                Admin
+              </Link>
+            </Button>
           )}
         </nav>
 
