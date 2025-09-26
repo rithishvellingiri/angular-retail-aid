@@ -3,16 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, CreditCard } from 'lucide-react';
+import { Trash2, CreditCard, Shield, CheckCircle } from 'lucide-react';
 import { localStorageService, Product, CartItem, Order } from '@/services/localStorageService';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
-
-declare global {
-  interface Window {
-    Razorpay: any;
-  }
-}
+import { PaymentService } from '@/services/paymentService';
 
 export default function Checkout() {
   const { user, isAuthenticated } = useAuth();
@@ -81,16 +76,6 @@ export default function Checkout() {
     localStorageService.updateCart(user!.id, updatedCart);
   };
 
-  const initializeRazorpay = () => {
-    return new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
-
   const handlePayment = async () => {
     if (cart.length === 0) {
       toast({
@@ -103,89 +88,99 @@ export default function Checkout() {
 
     setLoading(true);
     
-    const res = await initializeRazorpay();
-    if (!res) {
+    try {
+      const totalAmount = getTotalPrice();
+      const orderId = PaymentService.generateOrderId();
+      
+      await PaymentService.processPayment({
+        amount: totalAmount,
+        currency: 'INR',
+        orderId,
+        customerInfo: {
+          name: user!.username,
+          email: user!.email,
+          contact: '',
+        },
+        onSuccess: (response) => {
+          // Validate payment response
+          if (!PaymentService.validatePaymentResponse(response)) {
+            toast({
+              title: "Payment Verification Failed",
+              description: "Please contact support.",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          // Payment successful - Process order
+          const orderItems = getCartWithProducts().map(item => ({
+            productId: item.productId,
+            productName: item.product!.name,
+            quantity: item.quantity,
+            price: item.product!.price,
+          }));
+
+          const newOrder: Omit<Order, 'id' | 'createdAt' | 'updatedAt'> = {
+            userId: user!.id,
+            items: orderItems,
+            total: totalAmount,
+            status: 'completed',
+            paymentStatus: 'completed',
+            paymentId: response.razorpay_payment_id,
+          };
+
+          const order = localStorageService.addOrder(newOrder);
+
+          // Update stock
+          orderItems.forEach(item => {
+            const product = products.find(p => p.id === item.productId);
+            if (product) {
+              localStorageService.updateProduct(item.productId, {
+                stock: product.stock - item.quantity
+              });
+            }
+          });
+
+          // Add to history
+          localStorageService.addHistoryEntry({
+            userId: user!.id,
+            userName: user!.username,
+            action: 'Purchase Order',
+            details: `Purchased ${orderItems.length} items for ₹${totalAmount} - Payment ID: ${response.razorpay_payment_id}`,
+            type: 'purchase',
+          });
+
+          // Clear cart
+          localStorageService.clearCart(user!.id);
+          setCart([]);
+
+          toast({
+            title: "Payment Successful!",
+            description: `Order #${order.id} has been placed. Payment credited to merchant account.`,
+          });
+
+          // Redirect to success page
+          setTimeout(() => {
+            window.location.href = '/user-dashboard';
+          }, 2000);
+        },
+        onFailure: (error) => {
+          toast({
+            title: "Payment Failed",
+            description: error.message || "Payment was not completed.",
+            variant: "destructive",
+          });
+        }
+      });
+    } catch (error: any) {
       toast({
         title: "Payment Error",
-        description: "Razorpay SDK failed to load.",
+        description: error.message || "Failed to initialize payment.",
         variant: "destructive",
       });
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const totalAmount = getTotalPrice();
-    
-    const options = {
-      key: 'rzp_test_9999999999999', // Replace with your test key
-      amount: totalAmount * 100, // Amount in paise
-      currency: 'INR',
-      name: 'Departmental Store',
-      description: 'Purchase from our store',
-      image: '/placeholder.svg',
-      handler: function (response: any) {
-        // Payment successful
-        const orderItems = getCartWithProducts().map(item => ({
-          productId: item.productId,
-          productName: item.product!.name,
-          quantity: item.quantity,
-          price: item.product!.price,
-        }));
-
-        const newOrder: Omit<Order, 'id' | 'createdAt' | 'updatedAt'> = {
-          userId: user!.id,
-          items: orderItems,
-          total: totalAmount,
-          status: 'completed',
-          paymentStatus: 'completed',
-          paymentId: response.razorpay_payment_id,
-        };
-
-        const order = localStorageService.addOrder(newOrder);
-
-        // Update stock
-        orderItems.forEach(item => {
-          const product = products.find(p => p.id === item.productId);
-          if (product) {
-            localStorageService.updateProduct(item.productId, {
-              stock: product.stock - item.quantity
-            });
-          }
-        });
-
-        // Add to history
-        localStorageService.addHistoryEntry({
-          userId: user!.id,
-          userName: user!.username,
-          action: 'Purchase Order',
-          details: `Purchased ${orderItems.length} items for ₹${totalAmount}`,
-          type: 'purchase',
-        });
-
-        // Clear cart
-        localStorageService.clearCart(user!.id);
-        setCart([]);
-
-        toast({
-          title: "Payment Successful!",
-          description: `Order #${order.id} has been placed successfully.`,
-        });
-
-        // Redirect to order success page
-        window.location.href = '/user-dashboard';
-      },
-      prefill: {
-        name: user!.username,
-        email: user!.email,
-      },
-      theme: {
-        color: 'hsl(var(--primary))',
-      },
-    };
-
-    const paymentObject = new window.Razorpay(options);
-    paymentObject.open();
-    setLoading(false);
   };
 
   const cartWithProducts = getCartWithProducts();
@@ -293,11 +288,24 @@ export default function Checkout() {
                     disabled={loading || cartWithProducts.length === 0}
                   >
                     <CreditCard className="h-4 w-4 mr-2" />
-                    {loading ? 'Processing...' : 'Pay with Razorpay'}
+                    {loading ? 'Processing...' : 'Pay Securely'}
                   </Button>
-                  <p className="text-xs text-muted-foreground text-center">
-                    Secure payment powered by Razorpay
-                  </p>
+                  
+                  <div className="space-y-2 pt-4">
+                    <div className="flex items-center justify-center space-x-2 text-xs text-muted-foreground">
+                      <Shield className="h-3 w-3" />
+                      <span>Secure payment powered by Razorpay</span>
+                    </div>
+                    <div className="flex items-center justify-center space-x-2 text-xs text-muted-foreground">
+                      <CheckCircle className="h-3 w-3" />
+                      <span>Payment credited to: rithishvellingiri@oksbi</span>
+                    </div>
+                    <div className="text-center">
+                      <Badge variant="outline" className="text-xs">
+                        SSL Encrypted
+                      </Badge>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
