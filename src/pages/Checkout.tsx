@@ -8,12 +8,14 @@ import { toast } from '@/hooks/use-toast';
 import { PaymentService } from '@/services/paymentService';
 import PaymentSummary from '@/components/PaymentSummary';
 import CartItemCard from '@/components/CartItemCard';
+import PaymentModal from '@/components/PaymentModal';
 
 export default function Checkout() {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   useEffect(() => {
     // Wait for auth to load before redirecting
@@ -171,11 +173,18 @@ export default function Checkout() {
       return;
     }
 
+    setShowPaymentModal(true);
+  };
+
+  const processPayment = async () => {
     setLoading(true);
+    setShowPaymentModal(false);
     
     try {
       const totalAmount = getTotalPrice();
       const orderId = PaymentService.generateOrderId();
+      
+      console.log('Processing payment for amount:', totalAmount);
       
       await PaymentService.processPayment({
         amount: totalAmount,
@@ -187,7 +196,9 @@ export default function Checkout() {
           contact: '',
         },
         onSuccess: (response) => {
+          console.log('Payment success callback triggered:', response);
           if (!PaymentService.validatePaymentResponse(response)) {
+            console.error('Payment validation failed:', response);
             toast({
               title: "Payment Verification Failed",
               description: "Invalid payment response. Please contact support.",
@@ -199,7 +210,7 @@ export default function Checkout() {
           processOrder(response);
         },
         onFailure: (error) => {
-          console.error('Payment failure:', error);
+          console.error('Payment failure callback triggered:', error);
           toast({
             title: "Payment Failed",
             description: error.message || "Payment was not completed. Please try again.",
@@ -310,6 +321,15 @@ export default function Checkout() {
             />
           </div>
         </div>
+        
+        {/* Payment Modal */}
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          amount={getTotalPrice()}
+          onPayWithRazorpay={processPayment}
+          loading={loading}
+        />
       </div>
     </div>
   );

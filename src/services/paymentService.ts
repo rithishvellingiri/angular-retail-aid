@@ -24,16 +24,29 @@ interface PaymentResponse {
 }
 
 export class PaymentService {
-  private static readonly RAZORPAY_KEY = 'rzp_test_1DP5mmOlF5G5ag'; // Test key
+  private static readonly RAZORPAY_KEY = 'rzp_test_1DP5mmOlF5G5ag'; // Valid test key
   private static readonly MERCHANT_NAME = 'Rithish Vellingiri Store';
   private static readonly MERCHANT_UPI = 'rithishvellingiri@oksbi';
+  private static readonly TEST_MODE = true;
 
   static async initializeRazorpay(): Promise<boolean> {
     return new Promise((resolve) => {
+      // Check if Razorpay is already loaded
+      if (window.Razorpay) {
+        resolve(true);
+        return;
+      }
+
       const script = document.createElement('script');
       script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
+      script.onload = () => {
+        console.log('Razorpay SDK loaded successfully');
+        resolve(true);
+      };
+      script.onerror = (error) => {
+        console.error('Failed to load Razorpay SDK:', error);
+        resolve(false);
+      };
       document.body.appendChild(script);
     });
   }
@@ -58,6 +71,8 @@ export class PaymentService {
       // Generate order ID if not provided
       const orderId = options.orderId || this.generateOrderId();
 
+      console.log('Initiating payment with amount:', options.amount, 'INR');
+
       const paymentOptions = {
         key: this.RAZORPAY_KEY,
         amount: Math.round(options.amount * 100), // Amount in paise, rounded to avoid decimal issues
@@ -67,11 +82,14 @@ export class PaymentService {
         image: '/placeholder.svg',
         order_id: orderId,
         handler: (response: PaymentResponse) => {
+          console.log('Payment response received:', response);
           try {
             // Validate response before calling success
             if (this.validatePaymentResponse(response)) {
+              console.log('Payment successful:', response.razorpay_payment_id);
               options.onSuccess(response);
             } else {
+              console.error('Invalid payment response:', response);
               throw new Error('Invalid payment response received');
             }
           } catch (error) {
@@ -96,6 +114,7 @@ export class PaymentService {
         },
         modal: {
           ondismiss: () => {
+            console.log('Payment modal dismissed by user');
             if (options.onFailure) {
               options.onFailure(new Error('Payment cancelled by user'));
             }
