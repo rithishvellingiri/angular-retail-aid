@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
-import { Trash2, CreditCard, Shield, CheckCircle } from 'lucide-react';
+import { ArrowLeft, ShoppingCart } from 'lucide-react';
 import { localStorageService, Product, CartItem, Order } from '@/services/localStorageService';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { PaymentService } from '@/services/paymentService';
+import PaymentSummary from '@/components/PaymentSummary';
+import CartItemCard from '@/components/CartItemCard';
 
 export default function Checkout() {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
@@ -79,11 +79,93 @@ export default function Checkout() {
     localStorageService.updateCart(user!.id, updatedCart);
   };
 
+  const processOrder = (paymentResponse: any) => {
+    try {
+      const orderItems = getCartWithProducts().map(item => ({
+        productId: item.productId,
+        productName: item.product!.name,
+        quantity: item.quantity,
+        price: item.product!.price,
+      }));
+
+      const totalAmount = getTotalPrice();
+      const newOrder: Omit<Order, 'id' | 'createdAt' | 'updatedAt'> = {
+        userId: user!.id,
+        items: orderItems,
+        total: totalAmount,
+        status: 'completed',
+        paymentStatus: 'completed',
+        paymentId: paymentResponse.razorpay_payment_id,
+      };
+
+      const order = localStorageService.addOrder(newOrder);
+
+      // Update stock
+      orderItems.forEach(item => {
+        const product = products.find(p => p.id === item.productId);
+        if (product && product.stock >= item.quantity) {
+          localStorageService.updateProduct(item.productId, {
+            stock: product.stock - item.quantity
+          });
+        }
+      });
+
+      // Update products state to reflect new stock levels
+      setProducts(localStorageService.getProducts());
+
+      // Add to history
+      localStorageService.addHistoryEntry({
+        userId: user!.id,
+        userName: user!.username,
+        action: 'Purchase Order',
+        details: `Purchased ${orderItems.length} items for ${PaymentService.formatAmount(totalAmount)} - Payment ID: ${paymentResponse.razorpay_payment_id}`,
+        type: 'purchase',
+      });
+
+      // Clear cart
+      localStorageService.clearCart(user!.id);
+      setCart([]);
+
+      toast({
+        title: "🎉 Payment Successful!",
+        description: `Order #${order.id} placed successfully. Payment credited to merchant account.`,
+      });
+
+      // Redirect to user dashboard
+      setTimeout(() => {
+        window.location.href = '/user-dashboard';
+      }, 2000);
+    } catch (error) {
+      console.error('Order processing error:', error);
+      toast({
+        title: "Order Processing Error",
+        description: "Payment received but order processing failed. Please contact support.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handlePayment = async () => {
     if (cart.length === 0) {
       toast({
         title: "Empty Cart",
         description: "Please add items to cart before checkout.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate stock before payment
+    const cartWithProducts = getCartWithProducts();
+    const stockIssues = cartWithProducts.filter(item => 
+      item.quantity > item.product!.stock
+    );
+
+    if (stockIssues.length > 0) {
+      const issueItems = stockIssues.map(item => item.product!.name).join(', ');
+      toast({
+        title: "Stock Issue",
+        description: `Insufficient stock for: ${issueItems}. Please update quantities.`,
         variant: "destructive",
       });
       return;
@@ -105,83 +187,34 @@ export default function Checkout() {
           contact: '',
         },
         onSuccess: (response) => {
-          // Validate payment response
           if (!PaymentService.validatePaymentResponse(response)) {
             toast({
               title: "Payment Verification Failed",
-              description: "Please contact support.",
+              description: "Invalid payment response. Please contact support.",
               variant: "destructive",
             });
+            setLoading(false);
             return;
           }
-
-          // Payment successful - Process order
-          const orderItems = getCartWithProducts().map(item => ({
-            productId: item.productId,
-            productName: item.product!.name,
-            quantity: item.quantity,
-            price: item.product!.price,
-          }));
-
-          const newOrder: Omit<Order, 'id' | 'createdAt' | 'updatedAt'> = {
-            userId: user!.id,
-            items: orderItems,
-            total: totalAmount,
-            status: 'completed',
-            paymentStatus: 'completed',
-            paymentId: response.razorpay_payment_id,
-          };
-
-          const order = localStorageService.addOrder(newOrder);
-
-          // Update stock
-          orderItems.forEach(item => {
-            const product = products.find(p => p.id === item.productId);
-            if (product) {
-              localStorageService.updateProduct(item.productId, {
-                stock: product.stock - item.quantity
-              });
-            }
-          });
-
-          // Add to history
-          localStorageService.addHistoryEntry({
-            userId: user!.id,
-            userName: user!.username,
-            action: 'Purchase Order',
-            details: `Purchased ${orderItems.length} items for ₹${totalAmount} - Payment ID: ${response.razorpay_payment_id}`,
-            type: 'purchase',
-          });
-
-          // Clear cart
-          localStorageService.clearCart(user!.id);
-          setCart([]);
-
-          toast({
-            title: "Payment Successful!",
-            description: `Order #${order.id} has been placed. Payment credited to merchant account.`,
-          });
-
-          // Redirect to success page
-          setTimeout(() => {
-            window.location.href = '/user-dashboard';
-          }, 2000);
+          processOrder(response);
         },
         onFailure: (error) => {
+          console.error('Payment failure:', error);
           toast({
             title: "Payment Failed",
-            description: error.message || "Payment was not completed.",
+            description: error.message || "Payment was not completed. Please try again.",
             variant: "destructive",
           });
+          setLoading(false);
         }
       });
     } catch (error: any) {
+      console.error('Payment initialization error:', error);
       toast({
         title: "Payment Error",
-        description: error.message || "Failed to initialize payment.",
+        description: error.message || "Failed to initialize payment gateway. Please try again.",
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
     }
   };
@@ -207,69 +240,59 @@ export default function Checkout() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold text-foreground mb-8">Checkout</h1>
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-8">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => window.history.back()}
+            className="hover:bg-muted"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+          <div>
+            <h1 className="text-4xl font-bold text-foreground">Checkout</h1>
+            <p className="text-muted-foreground">Review your items and complete your purchase</p>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Cart Items */}
           <div className="lg:col-span-2">
             <Card>
               <CardHeader>
-                <CardTitle>Shopping Cart</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <ShoppingCart className="h-5 w-5" />
+                  Shopping Cart
+                  {cartWithProducts.length > 0 && (
+                    <span className="text-sm font-normal text-muted-foreground">
+                      ({cartWithProducts.length} items)
+                    </span>
+                  )}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {cartWithProducts.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground">Your cart is empty</p>
-                    <Button asChild className="mt-4">
-                      <a href="/products">Continue Shopping</a>
+                  <div className="text-center py-12">
+                    <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Your cart is empty</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Looks like you haven't added any items to your cart yet.
+                    </p>
+                    <Button asChild>
+                      <a href="/products">Browse Products</a>
                     </Button>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     {cartWithProducts.map(item => (
-                      <div key={item.productId} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex-1">
-                          <h3 className="font-semibold">{item.product!.name}</h3>
-                          <p className="text-sm text-muted-foreground">{item.product!.category}</p>
-                          <p className="text-lg font-bold text-primary">₹{item.product!.price}</p>
-                        </div>
-                        <div className="flex items-center space-x-4">
-                          <div className="flex items-center space-x-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                            >
-                              -
-                            </Button>
-                            <input
-                              type="number"
-                              value={item.quantity}
-                              onChange={(e) => updateQuantity(item.productId, parseInt(e.target.value) || 0)}
-                              className="w-16 text-center border rounded px-2 py-1"
-                              min="1"
-                              max={item.product!.stock}
-                            />
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                              disabled={item.quantity >= item.product!.stock}
-                            >
-                              +
-                            </Button>
-                          </div>
-                          <div className="w-20 text-right">
-                            <p className="font-semibold">₹{item.product!.price * item.quantity}</p>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => removeFromCart(item.productId)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
+                      <CartItemCard
+                        key={item.productId}
+                        item={item}
+                        onUpdateQuantity={updateQuantity}
+                        onRemove={removeFromCart}
+                      />
                     ))}
                   </div>
                 )}
@@ -277,53 +300,14 @@ export default function Checkout() {
             </Card>
           </div>
 
+          {/* Payment Summary */}
           <div>
-            <Card>
-              <CardHeader>
-                <CardTitle>Order Summary</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span>Items ({cartWithProducts.length})</span>
-                    <span>₹{getTotalPrice()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Shipping</span>
-                    <span>Free</span>
-                  </div>
-                  <Separator />
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>Total</span>
-                    <span>₹{getTotalPrice()}</span>
-                  </div>
-                  <Button
-                    className="w-full"
-                    onClick={handlePayment}
-                    disabled={loading || cartWithProducts.length === 0}
-                  >
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    {loading ? 'Processing...' : 'Pay Securely'}
-                  </Button>
-                  
-                  <div className="space-y-2 pt-4">
-                    <div className="flex items-center justify-center space-x-2 text-xs text-muted-foreground">
-                      <Shield className="h-3 w-3" />
-                      <span>Secure payment powered by Razorpay</span>
-                    </div>
-                    <div className="flex items-center justify-center space-x-2 text-xs text-muted-foreground">
-                      <CheckCircle className="h-3 w-3" />
-                      <span>Payment credited to: rithishvellingiri@oksbi</span>
-                    </div>
-                    <div className="text-center">
-                      <Badge variant="outline" className="text-xs">
-                        SSL Encrypted
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <PaymentSummary
+              items={cartWithProducts}
+              total={getTotalPrice()}
+              onPay={handlePayment}
+              loading={loading}
+            />
           </div>
         </div>
       </div>

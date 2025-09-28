@@ -17,8 +17,14 @@ interface PaymentOptions {
   onFailure?: (error: any) => void;
 }
 
+interface PaymentResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature?: string;
+}
+
 export class PaymentService {
-  private static readonly RAZORPAY_KEY = 'rzp_test_9999999999999'; // Replace with your actual key
+  private static readonly RAZORPAY_KEY = 'rzp_test_1DP5mmOlF5G5ag'; // Test key
   private static readonly MERCHANT_NAME = 'Rithish Vellingiri Store';
   private static readonly MERCHANT_UPI = 'rithishvellingiri@oksbi';
 
@@ -33,54 +39,122 @@ export class PaymentService {
   }
 
   static async processPayment(options: PaymentOptions): Promise<void> {
-    const razorpayLoaded = await this.initializeRazorpay();
-    
-    if (!razorpayLoaded) {
-      throw new Error('Razorpay SDK failed to load');
-    }
+    try {
+      const razorpayLoaded = await this.initializeRazorpay();
+      
+      if (!razorpayLoaded) {
+        throw new Error('Failed to load payment gateway. Please check your internet connection.');
+      }
 
-    const paymentOptions = {
-      key: this.RAZORPAY_KEY,
-      amount: options.amount * 100, // Amount in paise
-      currency: options.currency,
-      name: this.MERCHANT_NAME,
-      description: 'Purchase from Departmental Store',
-      image: '/placeholder.svg',
-      order_id: options.orderId,
-      handler: (response: any) => {
-        // Payment successful - will be credited to merchant account
-        options.onSuccess(response);
-      },
-      prefill: {
-        name: options.customerInfo.name,
-        email: options.customerInfo.email,
-        contact: options.customerInfo.contact || '',
-      },
-      notes: {
-        merchant_upi: this.MERCHANT_UPI,
-        store_name: this.MERCHANT_NAME,
-      },
-      theme: {
-        color: '#3B82F6',
-      },
-      modal: {
-        ondismiss: () => {
-          if (options.onFailure) {
-            options.onFailure(new Error('Payment cancelled by user'));
+      if (!window.Razorpay) {
+        throw new Error('Payment gateway not available. Please try again.');
+      }
+
+      // Validate amount
+      if (options.amount <= 0) {
+        throw new Error('Invalid payment amount');
+      }
+
+      // Generate order ID if not provided
+      const orderId = options.orderId || this.generateOrderId();
+
+      const paymentOptions = {
+        key: this.RAZORPAY_KEY,
+        amount: Math.round(options.amount * 100), // Amount in paise, rounded to avoid decimal issues
+        currency: options.currency || 'INR',
+        name: this.MERCHANT_NAME,
+        description: `Purchase from ${this.MERCHANT_NAME}`,
+        image: '/placeholder.svg',
+        order_id: orderId,
+        handler: (response: PaymentResponse) => {
+          try {
+            // Validate response before calling success
+            if (this.validatePaymentResponse(response)) {
+              options.onSuccess(response);
+            } else {
+              throw new Error('Invalid payment response received');
+            }
+          } catch (error) {
+            console.error('Payment handler error:', error);
+            if (options.onFailure) {
+              options.onFailure(error);
+            }
           }
         },
-      },
-    };
+        prefill: {
+          name: options.customerInfo.name || '',
+          email: options.customerInfo.email || '',
+          contact: options.customerInfo.contact || '',
+        },
+        notes: {
+          merchant_upi: this.MERCHANT_UPI,
+          store_name: this.MERCHANT_NAME,
+          order_id: orderId,
+        },
+        theme: {
+          color: '#3B82F6',
+        },
+        modal: {
+          ondismiss: () => {
+            if (options.onFailure) {
+              options.onFailure(new Error('Payment cancelled by user'));
+            }
+          },
+          confirm_close: true,
+        },
+        retry: {
+          enabled: true,
+          max_count: 3,
+        },
+      };
 
-    const razorpay = new window.Razorpay(paymentOptions);
-    razorpay.open();
+      const razorpay = new window.Razorpay(paymentOptions);
+      
+      // Add error handler for razorpay initialization
+      razorpay.on('payment.failed', (response: any) => {
+        console.error('Payment failed:', response.error);
+        if (options.onFailure) {
+          options.onFailure(new Error(response.error.description || 'Payment failed'));
+        }
+      });
+
+      razorpay.open();
+    } catch (error) {
+      console.error('Payment processing error:', error);
+      throw error;
+    }
   }
 
   static generateOrderId(): string {
-    return 'order_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 9);
+    return `order_${timestamp}_${randomStr}`;
   }
 
-  static validatePaymentResponse(response: any): boolean {
-    return !!(response.razorpay_payment_id && response.razorpay_order_id);
+  static validatePaymentResponse(response: PaymentResponse): boolean {
+    return !!(
+      response && 
+      response.razorpay_payment_id && 
+      response.razorpay_order_id &&
+      typeof response.razorpay_payment_id === 'string' &&
+      typeof response.razorpay_order_id === 'string' &&
+      response.razorpay_payment_id.length > 0 &&
+      response.razorpay_order_id.length > 0
+    );
+  }
+
+  static formatAmount(amount: number): string {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  }
+
+  static getPaymentStatus(paymentId: string): 'completed' | 'pending' | 'failed' {
+    // In a real app, this would make an API call to verify payment status
+    // For demo purposes, we'll assume all payments with valid IDs are completed
+    return paymentId && paymentId.startsWith('pay_') ? 'completed' : 'failed';
   }
 }
