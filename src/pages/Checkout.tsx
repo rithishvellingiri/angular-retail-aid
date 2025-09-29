@@ -9,6 +9,7 @@ import { PaymentService } from '@/services/paymentService';
 import PaymentSummary from '@/components/PaymentSummary';
 import CartItemCard from '@/components/CartItemCard';
 import PaymentModal from '@/components/PaymentModal';
+import UPIPaymentModal from '@/components/UPIPaymentModal';
 
 export default function Checkout() {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
@@ -16,6 +17,7 @@ export default function Checkout() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showUPIModal, setShowUPIModal] = useState(false);
 
   useEffect(() => {
     // Wait for auth to load before redirecting
@@ -230,6 +232,23 @@ export default function Checkout() {
     }
   };
 
+  const handleUPIPayment = () => {
+    setShowPaymentModal(false);
+    setShowUPIModal(true);
+  };
+
+  const handleUPIPaymentSuccess = () => {
+    // Simulate successful UPI payment
+    const mockResponse = {
+      razorpay_payment_id: `upi_${Date.now()}`,
+      razorpay_order_id: PaymentService.generateOrderId(),
+    };
+    
+    processOrder(mockResponse);
+    setShowUPIModal(false);
+    setLoading(false);
+  };
+
   const cartWithProducts = getCartWithProducts();
 
   // Show loading while auth is being checked
@@ -328,7 +347,16 @@ export default function Checkout() {
           onClose={() => setShowPaymentModal(false)}
           amount={getTotalPrice()}
           onPayWithRazorpay={processPayment}
+          onPayWithUPI={handleUPIPayment}
           loading={loading}
+        />
+        
+        {/* UPI Payment Modal */}
+        <UPIPaymentModal
+          isOpen={showUPIModal}
+          onClose={() => setShowUPIModal(false)}
+          amount={getTotalPrice()}
+          onPaymentSuccess={handleUPIPaymentSuccess}
         />
       </div>
     </div>

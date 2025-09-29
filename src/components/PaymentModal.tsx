@@ -8,6 +8,7 @@ interface PaymentModalProps {
   onClose: () => void;
   amount: number;
   onPayWithRazorpay: () => void;
+  onPayWithUPI: () => void;
   loading: boolean;
 }
 
@@ -16,6 +17,7 @@ export default function PaymentModal({
   onClose, 
   amount, 
   onPayWithRazorpay, 
+  onPayWithUPI,
   loading 
 }: PaymentModalProps) {
   return (
@@ -59,7 +61,7 @@ export default function PaymentModal({
             </Button>
             
             <Button
-              onClick={onPayWithRazorpay}
+              onClick={onPayWithUPI}
               disabled={loading}
               className="w-full h-auto p-4 justify-start"
               variant="outline"
@@ -69,7 +71,7 @@ export default function PaymentModal({
                   <Smartphone className="h-4 w-4 text-green-600" />
                 </div>
                 <div className="text-left">
-                  <p className="font-medium">UPI</p>
+                  <p className="font-medium">UPI / QR Code</p>
                   <p className="text-xs text-muted-foreground">PhonePe, GPay, Paytm</p>
                 </div>
               </div>

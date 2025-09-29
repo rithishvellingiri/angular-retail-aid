@@ -6,6 +6,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { MessageCircle, Send, Bot, User, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { localStorageService } from '@/services/localStorageService';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Message {
   id: string;
@@ -15,6 +17,7 @@ interface Message {
 }
 
 const Chatbot: React.FC = () => {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -44,6 +47,42 @@ const Chatbot: React.FC = () => {
 
   const getBotResponse = (userMessage: string): string => {
     const message = userMessage.toLowerCase();
+    
+    // Check if user has purchased products for feedback-related queries
+    const checkUserPurchases = () => {
+      if (!user) return [];
+      localStorageService.initialize();
+      const orders = localStorageService.getOrders().filter(order => 
+        order.userId === user.id && order.status === 'completed'
+      );
+      return orders;
+    };
+
+    // Product feedback and reviews
+    if (message.includes('feedback') || message.includes('review') || message.includes('complaint') || message.includes('suggestion')) {
+      const userOrders = checkUserPurchases();
+      
+      if (userOrders.length > 0) {
+        // User has purchased products
+        const recentOrder = userOrders[userOrders.length - 1];
+        const productNames = recentOrder.items.map(item => item.productName).join(', ');
+        
+        return `Thank you for your valuable feedback! 🙏 I can see you recently purchased: ${productNames}. Your experience matters greatly to us!\n\n✅ Your feedback has been recorded and will be forwarded to our product team\n✅ We'll use your input to improve our products and services\n✅ Our customer success team will review your comments within 24 hours\n\nIs there anything specific about your recent purchase you'd like to highlight? We're always looking to enhance our customer experience!`;
+      } else {
+        return "Thank you for your feedback! We value all customer input as it helps us improve our services. Your comments have been noted, and our team will review them to enhance your shopping experience. Feel free to browse our products and share your thoughts after making a purchase!";
+      }
+    }
+
+    // Product quality or satisfaction queries
+    if ((message.includes('quality') || message.includes('satisfied') || message.includes('happy') || message.includes('disappointed') || message.includes('excellent') || message.includes('poor') || message.includes('good') || message.includes('bad')) && (message.includes('product') || message.includes('purchase') || message.includes('bought') || message.includes('order'))) {
+      const userOrders = checkUserPurchases();
+      
+      if (userOrders.length > 0) {
+        return "Thank you for sharing your experience with our products! 😊 Your satisfaction is our top priority.\n\n📝 Your feedback has been automatically logged\n📞 Our quality assurance team will follow up if needed\n🔄 If you're not satisfied, we offer hassle-free returns within 30 days\n⭐ Consider leaving a detailed review to help other customers\n\nWould you like assistance with an exchange, return, or have specific suggestions for improvement?";
+      } else {
+        return "We appreciate your interest in product quality! While I don't see any recent purchases from your account, we're always committed to providing the best products. Feel free to share any questions about our quality standards or browse our highly-rated products!";
+      }
+    }
     
     // Product-related queries
     if (message.includes('product') || message.includes('item') || message.includes('what do you sell')) {
@@ -78,11 +117,6 @@ const Chatbot: React.FC = () => {
     // Store information
     if (message.includes('about') || message.includes('company') || message.includes('store') || message.includes('who are you')) {
       return "SmartStore is your trusted online shopping destination! We're committed to providing quality products at great prices with excellent customer service. Our goal is to make your shopping experience smooth and enjoyable.";
-    }
-    
-    // Feedback
-    if (message.includes('feedback') || message.includes('review') || message.includes('complaint') || message.includes('suggestion')) {
-      return "Thank you for your feedback! We value all customer input as it helps us improve our services. Your comments have been noted, and our team will review them to enhance your shopping experience.";
     }
     
     // Greetings
