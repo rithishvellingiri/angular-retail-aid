@@ -3,13 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Package, DollarSign, AlertTriangle, Users, TrendingUp, Warehouse } from 'lucide-react';
-import { localStorageService, Product, Supplier } from '@/services/localStorageService';
+import { Package, DollarSign, AlertTriangle, Users, TrendingUp, Warehouse, ShoppingCart } from 'lucide-react';
+import { localStorageService, Product, Supplier, Order } from '@/services/localStorageService';
 
 export default function StoreDashboard() {
   const [stats, setStats] = useState<any>({});
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
 
   useEffect(() => {
     localStorageService.initialize();
@@ -17,6 +18,7 @@ export default function StoreDashboard() {
     setStats(storeStats);
     setLowStockProducts(storeStats.lowStockItems);
     setSuppliers(localStorageService.getSuppliers());
+    setOrders(localStorageService.getOrders());
   }, []);
 
   const formatCurrency = (amount: number) => {
@@ -119,11 +121,58 @@ export default function StoreDashboard() {
           </Card>
         </div>
 
-        <Tabs defaultValue="lowstock" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs defaultValue="orders" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="orders">Recent Orders</TabsTrigger>
             <TabsTrigger value="lowstock">Low Stock Products</TabsTrigger>
             <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="orders">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShoppingCart className="h-5 w-5" />
+                  Recent Orders
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {orders.length === 0 ? (
+                  <div className="text-center py-8">
+                    <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No orders found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {orders
+                      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                      .slice(0, 10)
+                      .map(order => (
+                      <div key={order.id} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h3 className="font-semibold">Order #{order.id}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(order.createdAt).toLocaleDateString()} • {order.items.length} items
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-lg">{formatCurrency(order.total)}</p>
+                            <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
+                              {order.status}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Items: {order.items.map(item => item.productName).join(', ')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="lowstock">
             <Card>

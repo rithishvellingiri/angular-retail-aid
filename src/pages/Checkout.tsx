@@ -10,6 +10,7 @@ import PaymentSummary from '@/components/PaymentSummary';
 import CartItemCard from '@/components/CartItemCard';
 import PaymentModal from '@/components/PaymentModal';
 import UPIPaymentModal from '@/components/UPIPaymentModal';
+import OrderSuccess from '@/components/OrderSuccess';
 
 export default function Checkout() {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
@@ -18,6 +19,7 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showUPIModal, setShowUPIModal] = useState(false);
+  const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
 
   useEffect(() => {
     // Wait for auth to load before redirecting
@@ -130,15 +132,9 @@ export default function Checkout() {
       localStorageService.clearCart(user!.id);
       setCart([]);
 
-      toast({
-        title: "🎉 Payment Successful!",
-        description: `Order #${order.id} placed successfully. Payment credited to merchant account.`,
-      });
-
-      // Redirect to user dashboard
-      setTimeout(() => {
-        window.location.href = '/user-dashboard';
-      }, 2000);
+      // Show order success page instead of toast
+      setCompletedOrder(order);
+      setLoading(false);
     } catch (error) {
       console.error('Order processing error:', error);
       toast({
@@ -265,6 +261,23 @@ export default function Checkout() {
 
   if (!isAuthenticated) {
     return null;
+  }
+
+  // Show order success page if order is completed
+  if (completedOrder) {
+    return (
+      <OrderSuccess
+        order={completedOrder}
+        onContinueShopping={() => {
+          setCompletedOrder(null);
+          window.location.href = '/products';
+        }}
+        onViewDashboard={() => {
+          setCompletedOrder(null);
+          window.location.href = '/user-dashboard';
+        }}
+      />
+    );
   }
 
   return (

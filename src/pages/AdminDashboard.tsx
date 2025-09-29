@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Package, Users, ShoppingCart, AlertTriangle, Plus, Edit, Trash2, History } from 'lucide-react';
-import { localStorageService, Product, Category, Supplier, HistoryEntry } from '@/services/localStorageService';
+import { localStorageService, Product, Category, Supplier, HistoryEntry, Order } from '@/services/localStorageService';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import ProductForm from '@/components/ProductForm';
@@ -20,6 +20,7 @@ export default function AdminDashboard() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   
   // Form states
   const [showProductForm, setShowProductForm] = useState(false);
@@ -47,6 +48,7 @@ export default function AdminDashboard() {
     setSuppliers(localStorageService.getSuppliers());
     setHistory(localStorageService.getHistory());
     setLowStockProducts(storeStats.lowStockItems);
+    setOrders(localStorageService.getOrders());
   };
 
   const deleteProduct = (id: string) => {
@@ -183,13 +185,73 @@ export default function AdminDashboard() {
           </Card>
         </div>
 
-        <Tabs defaultValue="products" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+        <Tabs defaultValue="orders" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="products">Products</TabsTrigger>
             <TabsTrigger value="categories">Categories</TabsTrigger>
             <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
             <TabsTrigger value="history">All History</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="orders">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShoppingCart className="h-5 w-5" />
+                  All Orders
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {orders.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">No orders found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {orders
+                      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                      .map(order => (
+                      <div key={order.id} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h3 className="font-semibold">Order #{order.id}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              User ID: {order.userId} • {new Date(order.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-lg">₹{order.total}</p>
+                            <div className="flex space-x-2 mt-1">
+                              <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
+                                {order.status}
+                              </Badge>
+                              <Badge variant={order.paymentStatus === 'completed' ? 'default' : 'secondary'}>
+                                {order.paymentStatus}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {order.items.map((item, index) => (
+                            <div key={index} className="flex justify-between text-sm">
+                              <span>{item.productName} × {item.quantity}</span>
+                              <span>₹{item.price * item.quantity}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {order.paymentId && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Payment ID: {order.paymentId}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="products">
             <Card>
