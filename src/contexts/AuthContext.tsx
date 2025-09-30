@@ -5,6 +5,7 @@ export interface User {
   id: string;
   username: string;
   email: string;
+  mobile: string;
   role: 'admin' | 'user';
   createdAt: string;
 }
@@ -14,7 +15,7 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   isAdmin: boolean;
   login: (username: string, password: string) => Promise<boolean>;
-  register: (username: string, email: string, password: string) => Promise<boolean>;
+  register: (username: string, email: string, mobile: string, password: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
 }
@@ -54,6 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: 'admin',
           username: 'admin',
           email: 'admin@store.com',
+          mobile: '+1234567890',
           role: 'admin',
           createdAt: new Date().toISOString(),
         };
@@ -66,9 +68,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return true;
       }
 
-      // Check registered users
+      // Check registered users (username or mobile)
       const users = JSON.parse(localStorage.getItem('users') || '[]');
-      const foundUser = users.find((u: any) => u.username === username && u.password === password);
+      const foundUser = users.find((u: any) => (u.username === username || u.mobile === username) && u.password === password);
       
       if (foundUser) {
         const { password: _, ...userWithoutPassword } = foundUser;
@@ -97,15 +99,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (username: string, email: string, password: string): Promise<boolean> => {
+  const register = async (username: string, email: string, mobile: string, password: string): Promise<boolean> => {
     try {
       const users = JSON.parse(localStorage.getItem('users') || '[]');
       
-      // Check if username or email already exists
-      if (users.some((u: any) => u.username === username || u.email === email)) {
+      // Check if username, email, or mobile already exists
+      if (users.some((u: any) => u.username === username || u.email === email || u.mobile === mobile)) {
         toast({
           title: "Registration Failed",
-          description: "Username or email already exists.",
+          description: "Username, email, or mobile number already exists.",
           variant: "destructive",
         });
         return false;
@@ -115,6 +117,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: Date.now().toString(),
         username,
         email,
+        mobile,
         password,
         role: 'user' as const,
         createdAt: new Date().toISOString(),

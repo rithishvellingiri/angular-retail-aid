@@ -81,13 +81,13 @@ export const Login: React.FC = () => {
           <CardContent className="space-y-4">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="username">Username or Mobile Number</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="username"
                     type="text"
-                    placeholder="Enter your username"
+                    placeholder="Enter username or mobile number"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     className="pl-10"

@@ -6,12 +6,13 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
-import { Mail, User, Lock, Store, UserPlus } from 'lucide-react';
+import { Mail, User, Lock, Store, UserPlus, Phone } from 'lucide-react';
 
 export const Register: React.FC = () => {
   const [formData, setFormData] = useState({
     username: '',
     email: '',
+    mobile: '',
     password: '',
     confirmPassword: '',
   });
@@ -29,10 +30,10 @@ export const Register: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const { username, email, password, confirmPassword } = formData;
+    const { username, email, mobile, password, confirmPassword } = formData;
 
     // Validation
-    if (!username.trim() || !email.trim() || !password || !confirmPassword) {
+    if (!username.trim() || !email.trim() || !mobile.trim() || !password || !confirmPassword) {
       toast({
         title: "Validation Error",
         description: "Please fill in all fields.",
@@ -59,6 +60,15 @@ export const Register: React.FC = () => {
       return;
     }
 
+    if (mobile.trim().length < 10) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid mobile number.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (password.length < 6) {
       toast({
         title: "Validation Error",
@@ -78,7 +88,7 @@ export const Register: React.FC = () => {
     }
 
     setLoading(true);
-    const success = await register(username.trim(), email.trim(), password);
+    const success = await register(username.trim(), email.trim(), mobile.trim(), password);
     setLoading(false);
 
     if (success) {
@@ -139,6 +149,23 @@ export const Register: React.FC = () => {
                     type="email"
                     placeholder="Enter your email"
                     value={formData.email}
+                    onChange={handleChange}
+                    className="pl-10"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="mobile">Mobile Number</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="mobile"
+                    name="mobile"
+                    type="tel"
+                    placeholder="Enter your mobile number"
+                    value={formData.mobile}
                     onChange={handleChange}
                     className="pl-10"
                     required
