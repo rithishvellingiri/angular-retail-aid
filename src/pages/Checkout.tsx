@@ -6,6 +6,7 @@ import { localStorageService, Product, CartItem, Order } from '@/services/localS
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { PaymentService } from '@/services/paymentService';
+import { smsService } from '@/services/smsService';
 import PaymentSummary from '@/components/PaymentSummary';
 import CartItemCard from '@/components/CartItemCard';
 import PaymentModal from '@/components/PaymentModal';
@@ -131,6 +132,11 @@ export default function Checkout() {
       // Clear cart
       localStorageService.clearCart(user!.id);
       setCart([]);
+
+      // Send SMS confirmation if mobile number is available
+      if (user!.mobile) {
+        smsService.sendOrderConfirmation(user!.mobile, order, user!.username);
+      }
 
       // Show order success page instead of toast
       setCompletedOrder(order);
