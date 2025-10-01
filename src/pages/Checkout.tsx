@@ -25,11 +25,16 @@ export default function Checkout() {
   // Auto redirect to user dashboard after order completion
   useEffect(() => {
     if (completedOrder) {
+      console.log('⏰ Starting 3 second countdown for redirect...', completedOrder);
       const timer = setTimeout(() => {
+        console.log('🚀 Redirecting to user dashboard...');
         window.location.href = '/user-dashboard';
       }, 3000);
       
-      return () => clearTimeout(timer);
+      return () => {
+        console.log('⏹️ Clearing redirect timer');
+        clearTimeout(timer);
+      };
     }
   }, [completedOrder]);
 
@@ -98,6 +103,7 @@ export default function Checkout() {
   };
 
   const processOrder = (paymentResponse: any) => {
+    console.log('🔄 Processing order with payment response:', paymentResponse);
     try {
       const orderItems = getCartWithProducts().map(item => ({
         productId: item.productId,
@@ -150,7 +156,9 @@ export default function Checkout() {
       }
 
       // Show order success page instead of toast
+      console.log('✅ Order completed successfully:', order);
       setCompletedOrder(order);
+      console.log('📍 Completed order state set, should trigger redirect');
       setLoading(false);
     } catch (error) {
       console.error('Order processing error:', error);
@@ -211,9 +219,9 @@ export default function Checkout() {
           contact: '',
         },
         onSuccess: (response) => {
-          console.log('Payment success callback triggered:', response);
+          console.log('💰 Payment success callback triggered:', response);
           if (!PaymentService.validatePaymentResponse(response)) {
-            console.error('Payment validation failed:', response);
+            console.error('❌ Payment validation failed:', response);
             toast({
               title: "Payment Verification Failed",
               description: "Invalid payment response. Please contact support.",
