@@ -259,13 +259,17 @@ export default function Checkout() {
   };
 
   const handleUPIPaymentSuccess = () => {
+    console.log('🔵 Checkout: UPI payment success callback triggered');
     // Simulate successful UPI payment
     const mockResponse = {
       razorpay_payment_id: `upi_${Date.now()}`,
       razorpay_order_id: PaymentService.generateOrderId(),
     };
     
+    console.log('🔵 Checkout: Mock payment response created:', mockResponse);
+    console.log('🔵 Checkout: Calling processOrder...');
     processOrder(mockResponse);
+    console.log('🔵 Checkout: Closing UPI modal');
     setShowUPIModal(false);
     setLoading(false);
   };

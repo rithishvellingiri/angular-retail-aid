@@ -68,9 +68,13 @@ export default function UPIPaymentModal({
   };
 
   const handlePaymentSuccess = () => {
+    console.log('🟢 UPI Modal: User clicked "I\'ve Completed Payment"');
     setPaymentConfirmed(true);
+    console.log('🟢 UPI Modal: Payment confirmed state set, waiting 2 seconds...');
     setTimeout(() => {
+      console.log('🟢 UPI Modal: Calling onPaymentSuccess callback');
       onPaymentSuccess();
+      console.log('🟢 UPI Modal: Closing modal');
       onClose();
       setPaymentConfirmed(false);
     }, 2000);
