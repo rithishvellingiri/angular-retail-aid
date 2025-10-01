@@ -22,6 +22,17 @@ export default function Checkout() {
   const [showUPIModal, setShowUPIModal] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
 
+  // Auto redirect to user dashboard after order completion
+  useEffect(() => {
+    if (completedOrder) {
+      const timer = setTimeout(() => {
+        window.location.href = '/user-dashboard';
+      }, 3000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [completedOrder]);
+
   useEffect(() => {
     // Wait for auth to load before redirecting
     if (authLoading) return;
