@@ -10,49 +10,48 @@ import { toast } from '@/hooks/use-toast';
 import { Lock, User, Store, Shield } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!username.trim() || !password.trim()) {
+    if (!email.trim() || !password.trim()) {
       toast({
         title: "Validation Error",
-        description: "Please enter both username and password.",
+        description: "Please enter both email and password.",
         variant: "destructive",
       });
       return;
     }
 
     setLoading(true);
-    const success = await login(username.trim(), password);
+    const success = await login(email.trim(), password);
     setLoading(false);
 
     if (success) {
-      navigate('/');
+      // Navigation will be handled by the useEffect below
     }
   };
 
-  const handleDemoLogin = async (type: 'admin' | 'user') => {
-    setLoading(true);
-    
-    if (type === 'admin') {
-      await login('admin', 'admin123');
-      navigate('/admin');
-    } else {
-      // For demo user, we'll create a demo account if it doesn't exist
-      setUsername('demouser');
-      setPassword('demo123');
-      await login('demouser', 'demo123');
-      navigate('/');
+  // Navigate based on user role after login
+  React.useEffect(() => {
+    if (user) {
+      switch (user.role) {
+        case 'admin':
+          navigate('/admin');
+          break;
+        case 'store':
+          navigate('/store');
+          break;
+        default:
+          navigate('/');
+      }
     }
-    
-    setLoading(false);
-  };
+  }, [user, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-admin/5 p-4">
@@ -81,15 +80,15 @@ export const Login: React.FC = () => {
           <CardContent className="space-y-4">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="username">Username or Mobile Number</Label>
+                <Label htmlFor="email">Email</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="username"
-                    type="text"
-                    placeholder="Enter username or mobile number"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    id="email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="pl-10"
                     required
                   />
@@ -122,38 +121,6 @@ export const Login: React.FC = () => {
               </Button>
             </form>
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">
-                  Or try demo accounts
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <Button
-                variant="outline"
-                onClick={() => handleDemoLogin('admin')}
-                disabled={loading}
-                className="w-full"
-              >
-                <Shield className="mr-2 h-4 w-4" />
-                Admin Demo
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleDemoLogin('user')}
-                disabled={loading}
-                className="w-full"
-              >
-                <User className="mr-2 h-4 w-4" />
-                User Demo
-              </Button>
-            </div>
-
             <Separator />
 
             <div className="text-center space-y-2">
@@ -162,10 +129,6 @@ export const Login: React.FC = () => {
                 <Link to="/register" className="text-primary hover:underline font-medium">
                   Sign up here
                 </Link>
-              </p>
-              <p className="text-xs text-muted-foreground">
-                <strong>Admin:</strong> admin / admin123 <br />
-                <strong>Demo User:</strong> Use demo buttons above
               </p>
             </div>
           </CardContent>

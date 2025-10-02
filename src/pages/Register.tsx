@@ -92,7 +92,7 @@ export const Register: React.FC = () => {
     setLoading(false);
 
     if (success) {
-      navigate('/');
+      navigate('/login');
     }
   };
 
