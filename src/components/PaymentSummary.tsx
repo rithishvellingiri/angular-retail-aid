@@ -4,7 +4,18 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { CreditCard, Shield, CheckCircle, Loader2 } from 'lucide-react';
-import { CartItem, Product } from '@/services/localStorageService';
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+}
+
+interface CartItem {
+  productId: string;
+  quantity: number;
+}
 
 interface PaymentSummaryProps {
   items: (CartItem & { product: Product })[];

@@ -2,7 +2,20 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Trash2, Plus, Minus } from 'lucide-react';
-import { CartItem, Product } from '@/services/localStorageService';
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  image_url?: string;
+  description?: string;
+}
+
+interface CartItem {
+  productId: string;
+  quantity: number;
+}
 
 interface CartItemCardProps {
   item: CartItem & { product: Product };
@@ -22,7 +35,9 @@ export default function CartItemCard({ item, onUpdateQuantity, onRemove }: CartI
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <h3 className="font-semibold text-foreground truncate">{product.name}</h3>
-            <p className="text-sm text-muted-foreground">{product.category}</p>
+            {product.description && (
+              <p className="text-sm text-muted-foreground line-clamp-1">{product.description}</p>
+            )}
             <div className="flex items-center gap-2 mt-1">
               <p className="text-lg font-bold text-primary">₹{product.price.toLocaleString()}</p>
               {isLowStock && (

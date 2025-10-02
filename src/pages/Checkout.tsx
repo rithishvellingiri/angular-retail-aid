@@ -1,58 +1,89 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ShoppingCart } from 'lucide-react';
-import { localStorageService, Product, CartItem, Order } from '@/services/localStorageService';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { PaymentService } from '@/services/paymentService';
-import { smsService } from '@/services/smsService';
 import PaymentSummary from '@/components/PaymentSummary';
 import CartItemCard from '@/components/CartItemCard';
 import PaymentModal from '@/components/PaymentModal';
 import UPIPaymentModal from '@/components/UPIPaymentModal';
-import OrderSuccess from '@/components/OrderSuccess';
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  image_url?: string;
+  description?: string;
+  category_id?: string;
+  supplier_id?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface CartItem {
+  productId: string;
+  quantity: number;
+}
 
 export default function Checkout() {
+  const navigate = useNavigate();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showUPIModal, setShowUPIModal] = useState(false);
-  const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
+  const [completedOrderId, setCompletedOrderId] = useState<string | null>(null);
 
-  // Auto redirect to user dashboard after order completion
+  // Load data on mount
   useEffect(() => {
-    if (completedOrder) {
-      console.log('⏰ Starting 3 second countdown for redirect...', completedOrder);
-      const timer = setTimeout(() => {
-        console.log('🚀 Redirecting to user dashboard...');
-        window.location.href = '/user-dashboard';
-      }, 3000);
-      
-      return () => {
-        console.log('⏹️ Clearing redirect timer');
-        clearTimeout(timer);
-      };
-    }
-  }, [completedOrder]);
-
-  useEffect(() => {
-    // Wait for auth to load before redirecting
     if (authLoading) return;
     
     if (!isAuthenticated) {
-      window.location.href = '/login';
+      navigate('/login');
       return;
     }
 
-    localStorageService.initialize();
-    setProducts(localStorageService.getProducts());
-    if (user) {
-      setCart(localStorageService.getCart(user.id));
+    loadData();
+  }, [user, isAuthenticated, authLoading, navigate]);
+
+  const loadData = async () => {
+    try {
+      // Load products
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('*');
+      
+      if (productsError) throw productsError;
+      setProducts(productsData || []);
+
+      // Load cart
+      if (user) {
+        const { data: cartData, error: cartError } = await supabase
+          .from('cart_items')
+          .select('*')
+          .eq('user_id', user.id);
+        
+        if (cartError) throw cartError;
+        setCart(cartData?.map(item => ({
+          productId: item.product_id,
+          quantity: item.quantity
+        })) || []);
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load cart data.",
+        variant: "destructive",
+      });
     }
-  }, [user, isAuthenticated, authLoading]);
+  };
 
   const getCartWithProducts = () => {
     return cart.map(item => {
@@ -67,17 +98,32 @@ export default function Checkout() {
     );
   };
 
-  const removeFromCart = (productId: string) => {
-    const updatedCart = cart.filter(item => item.productId !== productId);
-    setCart(updatedCart);
-    localStorageService.updateCart(user!.id, updatedCart);
-    toast({
-      title: "Item Removed",
-      description: "Item removed from cart.",
-    });
+  const removeFromCart = async (productId: string) => {
+    try {
+      await supabase
+        .from('cart_items')
+        .delete()
+        .eq('user_id', user!.id)
+        .eq('product_id', productId);
+      
+      const updatedCart = cart.filter(item => item.productId !== productId);
+      setCart(updatedCart);
+      
+      toast({
+        title: "Item Removed",
+        description: "Item removed from cart.",
+      });
+    } catch (error) {
+      console.error('Error removing item:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove item from cart.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const updateQuantity = (productId: string, newQuantity: number) => {
+  const updateQuantity = async (productId: string, newQuantity: number) => {
     const product = products.find(p => p.id === productId);
     if (!product) return;
 
@@ -95,70 +141,120 @@ export default function Checkout() {
       return;
     }
 
-    const updatedCart = cart.map(item =>
-      item.productId === productId ? { ...item, quantity: newQuantity } : item
-    );
-    setCart(updatedCart);
-    localStorageService.updateCart(user!.id, updatedCart);
+    try {
+      await supabase
+        .from('cart_items')
+        .update({ quantity: newQuantity })
+        .eq('user_id', user!.id)
+        .eq('product_id', productId);
+
+      const updatedCart = cart.map(item =>
+        item.productId === productId ? { ...item, quantity: newQuantity } : item
+      );
+      setCart(updatedCart);
+    } catch (error) {
+      console.error('Error updating quantity:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update quantity.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const processOrder = (paymentResponse: any) => {
+  const processOrder = async (paymentResponse: any) => {
     console.log('🔄 Processing order with payment response:', paymentResponse);
     try {
-      const orderItems = getCartWithProducts().map(item => ({
-        productId: item.productId,
-        productName: item.product!.name,
+      const cartWithProducts = getCartWithProducts();
+      const totalAmount = getTotalPrice();
+
+      // Create order in database
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          user_id: user!.id,
+          total: totalAmount,
+          status: 'completed',
+          payment_status: 'completed',
+          payment_id: paymentResponse.razorpay_payment_id,
+          razorpay_order_id: paymentResponse.razorpay_order_id,
+          razorpay_payment_id: paymentResponse.razorpay_payment_id
+        })
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+      console.log('✅ Order created:', orderData);
+
+      // Create order items
+      const orderItems = cartWithProducts.map(item => ({
+        order_id: orderData.id,
+        product_id: item.productId,
+        product_name: item.product!.name,
         quantity: item.quantity,
-        price: item.product!.price,
+        price: item.product!.price
       }));
 
-      const totalAmount = getTotalPrice();
-      const newOrder: Omit<Order, 'id' | 'createdAt' | 'updatedAt'> = {
-        userId: user!.id,
-        items: orderItems,
-        total: totalAmount,
-        status: 'completed',
-        paymentStatus: 'completed',
-        paymentId: paymentResponse.razorpay_payment_id,
-      };
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
 
-      const order = localStorageService.addOrder(newOrder);
+      if (itemsError) throw itemsError;
+      console.log('✅ Order items created');
 
-      // Update stock
-      orderItems.forEach(item => {
-        const product = products.find(p => p.id === item.productId);
-        if (product && product.stock >= item.quantity) {
-          localStorageService.updateProduct(item.productId, {
-            stock: product.stock - item.quantity
-          });
-        }
-      });
+      // Update stock for each product
+      for (const item of cartWithProducts) {
+        const product = item.product!;
+        const { error: stockError } = await supabase
+          .from('products')
+          .update({ stock: product.stock - item.quantity })
+          .eq('id', item.productId);
 
-      // Update products state to reflect new stock levels
-      setProducts(localStorageService.getProducts());
-
-      // Add to history
-      localStorageService.addHistoryEntry({
-        userId: user!.id,
-        userName: user!.username,
-        action: 'Purchase Order',
-        details: `Purchased ${orderItems.length} items for ${PaymentService.formatAmount(totalAmount)} - Payment ID: ${paymentResponse.razorpay_payment_id}`,
-        type: 'purchase',
-      });
+        if (stockError) throw stockError;
+      }
+      console.log('✅ Stock updated');
 
       // Clear cart
-      localStorageService.clearCart(user!.id);
+      const { error: clearCartError } = await supabase
+        .from('cart_items')
+        .delete()
+        .eq('user_id', user!.id);
+
+      if (clearCartError) throw clearCartError;
+      console.log('✅ Cart cleared');
+
+      // Add to history
+      const { error: historyError } = await supabase
+        .from('history')
+        .insert({
+          user_id: user!.id,
+          user_name: user!.username,
+          action: 'Purchase Order',
+          details: `Purchased ${orderItems.length} items for ${PaymentService.formatAmount(totalAmount)} - Payment ID: ${paymentResponse.razorpay_payment_id}`,
+          type: 'purchase'
+        });
+
+      if (historyError) throw historyError;
+      console.log('✅ History entry created');
+
+      // Update local state
       setCart([]);
+      await loadData(); // Reload products to show updated stock
 
-      // Send SMS confirmation if mobile number is available
-      if (user!.mobile) {
-        smsService.sendOrderConfirmation(user!.mobile, order, user!.username);
-      }
+      toast({
+        title: "Order Completed!",
+        description: "Your order has been placed successfully.",
+      });
 
-      // Show order success page instead of toast
-      console.log('✅ Order completed successfully:', order);
-      setCompletedOrder(order);
-      console.log('📍 Completed order state set, should trigger redirect');
+      // Set completed order ID and redirect after 2 seconds
+      setCompletedOrderId(orderData.id);
+      console.log('📍 Order completed, redirecting in 2 seconds...');
+      
+      setTimeout(() => {
+        console.log('🚀 Redirecting to user dashboard...');
+        navigate('/user');
+      }, 2000);
+
       setLoading(false);
     } catch (error) {
       console.error('Order processing error:', error);
@@ -167,6 +263,7 @@ export default function Checkout() {
         description: "Payment received but order processing failed. Please contact support.",
         variant: "destructive",
       });
+      setLoading(false);
     }
   };
 
@@ -258,8 +355,11 @@ export default function Checkout() {
     setShowUPIModal(true);
   };
 
-  const handleUPIPaymentSuccess = () => {
+  const handleUPIPaymentSuccess = async () => {
     console.log('🔵 Checkout: UPI payment success callback triggered');
+    setLoading(true);
+    setShowUPIModal(false);
+    
     // Simulate successful UPI payment
     const mockResponse = {
       razorpay_payment_id: `upi_${Date.now()}`,
@@ -268,10 +368,7 @@ export default function Checkout() {
     
     console.log('🔵 Checkout: Mock payment response created:', mockResponse);
     console.log('🔵 Checkout: Calling processOrder...');
-    processOrder(mockResponse);
-    console.log('🔵 Checkout: Closing UPI modal');
-    setShowUPIModal(false);
-    setLoading(false);
+    await processOrder(mockResponse);
   };
 
   const cartWithProducts = getCartWithProducts();
@@ -292,20 +389,27 @@ export default function Checkout() {
     return null;
   }
 
-  // Show order success page if order is completed
-  if (completedOrder) {
+  // Show success message if order is completed
+  if (completedOrderId) {
     return (
-      <OrderSuccess
-        order={completedOrder}
-        onContinueShopping={() => {
-          setCompletedOrder(null);
-          window.location.href = '/products';
-        }}
-        onViewDashboard={() => {
-          setCompletedOrder(null);
-          window.location.href = '/user-dashboard';
-        }}
-      />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="max-w-md mx-auto text-center p-8">
+          <div className="mb-4">
+            <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+          </div>
+          <CardTitle className="text-2xl font-bold mb-2">Payment Successful!</CardTitle>
+          <p className="text-muted-foreground mb-4">
+            Your order has been placed successfully. Redirecting to your dashboard...
+          </p>
+          <div className="flex justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        </Card>
+      </div>
     );
   }
 
