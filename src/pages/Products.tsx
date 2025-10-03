@@ -113,11 +113,13 @@ export default function Products() {
     if (newQuantity === 0) {
       // Remove from cart
       try {
-        await supabase
+        const { error } = await supabase
           .from('cart_items')
           .delete()
           .eq('user_id', user.id)
           .eq('product_id', productId);
+        
+        if (error) throw error;
         
         setCart(cart.filter(item => item.productId !== productId));
       } catch (error) {
@@ -133,29 +135,35 @@ export default function Products() {
 
     try {
       // Check if item exists in cart
-      const { data: existingItem } = await supabase
+      const { data: existingItem, error: fetchError } = await supabase
         .from('cart_items')
         .select('*')
         .eq('user_id', user.id)
         .eq('product_id', productId)
-        .single();
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
 
       if (existingItem) {
         // Update existing item
-        await supabase
+        const { error: updateError } = await supabase
           .from('cart_items')
           .update({ quantity: newQuantity })
           .eq('user_id', user.id)
           .eq('product_id', productId);
+        
+        if (updateError) throw updateError;
       } else {
         // Insert new item
-        await supabase
+        const { error: insertError } = await supabase
           .from('cart_items')
           .insert({
             user_id: user.id,
             product_id: productId,
             quantity: newQuantity
           });
+        
+        if (insertError) throw insertError;
       }
 
       // Update local state
