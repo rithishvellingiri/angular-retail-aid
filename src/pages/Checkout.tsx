@@ -315,7 +315,7 @@ export default function Checkout() {
           email: user!.email,
           contact: '',
         },
-        onSuccess: (response) => {
+        onSuccess: async (response) => {
           console.log('💰 Payment success callback triggered:', response);
           if (!PaymentService.validatePaymentResponse(response)) {
             console.error('❌ Payment validation failed:', response);
@@ -327,7 +327,12 @@ export default function Checkout() {
             setLoading(false);
             return;
           }
-          processOrder(response);
+          try {
+            await processOrder(response);
+          } catch (error) {
+            console.error('💰 Payment: Error in processOrder:', error);
+            setLoading(false);
+          }
         },
         onFailure: (error) => {
           console.error('Payment failure callback triggered:', error);
@@ -357,8 +362,8 @@ export default function Checkout() {
 
   const handleUPIPaymentSuccess = async () => {
     console.log('🔵 Checkout: UPI payment success callback triggered');
-    setLoading(true);
     setShowUPIModal(false);
+    setLoading(true);
     
     // Simulate successful UPI payment
     const mockResponse = {
@@ -368,7 +373,13 @@ export default function Checkout() {
     
     console.log('🔵 Checkout: Mock payment response created:', mockResponse);
     console.log('🔵 Checkout: Calling processOrder...');
-    await processOrder(mockResponse);
+    
+    try {
+      await processOrder(mockResponse);
+    } catch (error) {
+      console.error('🔵 Checkout: Error in processOrder:', error);
+      setLoading(false);
+    }
   };
 
   const cartWithProducts = getCartWithProducts();
