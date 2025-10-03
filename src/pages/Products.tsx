@@ -5,32 +5,87 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ShoppingCart, Plus, Minus } from 'lucide-react';
-import { localStorageService, Product, CartItem } from '@/services/localStorageService';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  description?: string;
+  category_id?: string;
+  supplier_id?: string;
+  image_url?: string;
+}
+
+interface Category {
+  id: string;
+  name: string;
+}
+
+interface CartItem {
+  productId: string;
+  quantity: number;
+}
 
 export default function Products() {
   const { user, isAuthenticated } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [cart, setCart] = useState<CartItem[]>([]);
 
   useEffect(() => {
-    localStorageService.initialize();
-    setProducts(localStorageService.getProducts());
-    const cats = localStorageService.getCategories();
-    setCategories(cats.map(c => c.name));
-    
-    if (user) {
-      setCart(localStorageService.getCart(user.id));
-    }
+    loadData();
   }, [user]);
+
+  const loadData = async () => {
+    try {
+      // Load products
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('*');
+      
+      if (productsError) throw productsError;
+      setProducts(productsData || []);
+
+      // Load categories
+      const { data: categoriesData, error: categoriesError } = await supabase
+        .from('categories')
+        .select('*');
+      
+      if (categoriesError) throw categoriesError;
+      setCategories(categoriesData || []);
+
+      // Load cart if user is logged in
+      if (user) {
+        const { data: cartData, error: cartError } = await supabase
+          .from('cart_items')
+          .select('*')
+          .eq('user_id', user.id);
+        
+        if (cartError) throw cartError;
+        setCart(cartData?.map(item => ({
+          productId: item.product_id,
+          quantity: item.quantity
+        })) || []);
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load products.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === '' || selectedCategory === 'all' || product.category === selectedCategory;
+    const matchesCategory = selectedCategory === '' || selectedCategory === 'all' || product.category_id === selectedCategory;
     return matchesSearch && matchesCategory && product.stock > 0;
   });
 
@@ -39,7 +94,7 @@ export default function Products() {
     return item ? item.quantity : 0;
   };
 
-  const updateCartQuantity = (productId: string, change: number) => {
+  const updateCartQuantity = async (productId: string, change: number) => {
     if (!isAuthenticated || !user) {
       toast({
         title: "Login Required",
@@ -55,18 +110,71 @@ export default function Products() {
     const currentQuantity = getCartQuantity(productId);
     const newQuantity = Math.max(0, Math.min(currentQuantity + change, product.stock));
 
-    const updatedCart = cart.filter(item => item.productId !== productId);
-    if (newQuantity > 0) {
-      updatedCart.push({ productId, quantity: newQuantity });
+    if (newQuantity === 0) {
+      // Remove from cart
+      try {
+        await supabase
+          .from('cart_items')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('product_id', productId);
+        
+        setCart(cart.filter(item => item.productId !== productId));
+      } catch (error) {
+        console.error('Error removing from cart:', error);
+        toast({
+          title: "Error",
+          description: "Failed to update cart.",
+          variant: "destructive",
+        });
+      }
+      return;
     }
 
-    setCart(updatedCart);
-    localStorageService.updateCart(user.id, updatedCart);
+    try {
+      // Check if item exists in cart
+      const { data: existingItem } = await supabase
+        .from('cart_items')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('product_id', productId)
+        .single();
 
-    if (change > 0) {
+      if (existingItem) {
+        // Update existing item
+        await supabase
+          .from('cart_items')
+          .update({ quantity: newQuantity })
+          .eq('user_id', user.id)
+          .eq('product_id', productId);
+      } else {
+        // Insert new item
+        await supabase
+          .from('cart_items')
+          .insert({
+            user_id: user.id,
+            product_id: productId,
+            quantity: newQuantity
+          });
+      }
+
+      // Update local state
+      const updatedCart = cart.filter(item => item.productId !== productId);
+      updatedCart.push({ productId, quantity: newQuantity });
+      setCart(updatedCart);
+
+      if (change > 0) {
+        toast({
+          title: "Added to Cart",
+          description: `${product.name} added to cart.`,
+        });
+      }
+    } catch (error) {
+      console.error('Error updating cart:', error);
       toast({
-        title: "Added to Cart",
-        description: `${product.name} added to cart.`,
+        title: "Error",
+        description: "Failed to update cart.",
+        variant: "destructive",
       });
     }
   };
@@ -121,7 +229,7 @@ export default function Products() {
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
               {categories.map(category => (
-                <SelectItem key={category} value={category}>{category}</SelectItem>
+                <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -133,9 +241,7 @@ export default function Products() {
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                   <CardTitle className="text-lg line-clamp-2">{product.name}</CardTitle>
-                  <Badge variant="outline">{product.category}</Badge>
                 </div>
-                <p className="text-sm text-muted-foreground">{product.supplier}</p>
               </CardHeader>
               
               <CardContent className="pb-3">
