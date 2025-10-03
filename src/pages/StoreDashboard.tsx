@@ -4,22 +4,85 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Package, DollarSign, AlertTriangle, Users, TrendingUp, Warehouse, ShoppingCart } from 'lucide-react';
-import { localStorageService, Product, Supplier, Order } from '@/services/localStorageService';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  category_id?: string;
+  supplier_id?: string;
+}
+
+interface Supplier {
+  id: string;
+  name: string;
+  email?: string;
+  contact: string;
+  address?: string;
+  created_at: string;
+}
+
+interface Order {
+  id: string;
+  user_id: string;
+  total: number;
+  status: string;
+  created_at: string;
+}
 
 export default function StoreDashboard() {
-  const [stats, setStats] = useState<any>({});
-  const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
 
   useEffect(() => {
-    localStorageService.initialize();
-    const storeStats = localStorageService.getStats();
-    setStats(storeStats);
-    setLowStockProducts(storeStats.lowStockItems);
-    setSuppliers(localStorageService.getSuppliers());
-    setOrders(localStorageService.getOrders());
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    try {
+      const [productsRes, suppliersRes, ordersRes, categoriesRes] = await Promise.all([
+        supabase.from('products').select('*'),
+        supabase.from('suppliers').select('*'),
+        supabase.from('orders').select('*').order('created_at', { ascending: false }),
+        supabase.from('categories').select('*')
+      ]);
+
+      if (productsRes.error) throw productsRes.error;
+      if (suppliersRes.error) throw suppliersRes.error;
+      if (ordersRes.error) throw ordersRes.error;
+      if (categoriesRes.error) throw categoriesRes.error;
+
+      setProducts(productsRes.data || []);
+      setSuppliers(suppliersRes.data || []);
+      setOrders(ordersRes.data || []);
+      setCategories(categoriesRes.data || []);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load data.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const lowStockProducts = products.filter(p => p.stock < 10);
+  const totalStock = products.reduce((sum, p) => sum + p.stock, 0);
+  const totalValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
+
+  const stats = {
+    products: products.length,
+    totalStock,
+    totalValue,
+    lowStockProducts: lowStockProducts.length,
+    orders: orders.length,
+    suppliers: suppliers.length
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -145,15 +208,14 @@ export default function StoreDashboard() {
                 ) : (
                   <div className="space-y-4">
                     {orders
-                      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                       .slice(0, 10)
                       .map(order => (
                       <div key={order.id} className="border rounded-lg p-4">
                         <div className="flex justify-between items-start mb-3">
                           <div>
-                            <h3 className="font-semibold">Order #{order.id}</h3>
+                            <h3 className="font-semibold">Order #{order.id.slice(0, 8)}</h3>
                             <p className="text-sm text-muted-foreground">
-                              {new Date(order.createdAt).toLocaleDateString()} • {order.items.length} items
+                              {new Date(order.created_at).toLocaleDateString()}
                             </p>
                           </div>
                           <div className="text-right">
@@ -162,9 +224,6 @@ export default function StoreDashboard() {
                               {order.status}
                             </Badge>
                           </div>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          Items: {order.items.map(item => item.productName).join(', ')}
                         </div>
                       </div>
                     ))}
@@ -194,8 +253,12 @@ export default function StoreDashboard() {
                       <div key={product.id} className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="flex-1">
                           <h3 className="font-semibold">{product.name}</h3>
-                          <p className="text-sm text-muted-foreground">{product.category}</p>
-                          <p className="text-sm text-muted-foreground">Supplier: {product.supplier}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {categories.find(c => c.id === product.category_id)?.name || 'N/A'}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Supplier: {suppliers.find(s => s.id === product.supplier_id)?.name || 'N/A'}
+                          </p>
                         </div>
                         <div className="text-right">
                           <Badge 
@@ -231,11 +294,11 @@ export default function StoreDashboard() {
                       <div key={supplier.id} className="border rounded-lg p-4">
                         <h3 className="font-semibold text-lg mb-2">{supplier.name}</h3>
                         <div className="space-y-1 text-sm">
-                          <p><strong>Email:</strong> {supplier.email}</p>
-                          <p><strong>Phone:</strong> {supplier.phone}</p>
-                          <p><strong>Address:</strong> {supplier.address}</p>
+                          {supplier.email && <p><strong>Email:</strong> {supplier.email}</p>}
+                          <p><strong>Contact:</strong> {supplier.contact}</p>
+                          {supplier.address && <p><strong>Address:</strong> {supplier.address}</p>}
                           <p className="text-muted-foreground">
-                            Joined: {new Date(supplier.createdAt).toLocaleDateString()}
+                            Joined: {new Date(supplier.created_at).toLocaleDateString()}
                           </p>
                         </div>
                       </div>

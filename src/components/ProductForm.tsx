@@ -5,8 +5,29 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Product, Category, Supplier, localStorageService } from '@/services/localStorageService';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  description?: string;
+  category_id?: string;
+  supplier_id?: string;
+  image_url?: string;
+}
+
+interface Category {
+  id: string;
+  name: string;
+}
+
+interface Supplier {
+  id: string;
+  name: string;
+}
 
 interface ProductFormProps {
   isOpen: boolean;
@@ -21,28 +42,44 @@ export default function ProductForm({ isOpen, onClose, product, onSave }: Produc
     description: '',
     price: '',
     stock: '',
-    category: '',
-    supplier: '',
-    image: ''
+    category_id: '',
+    supplier_id: '',
+    image_url: ''
   });
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   useEffect(() => {
-    setCategories(localStorageService.getCategories());
-    setSuppliers(localStorageService.getSuppliers());
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    try {
+      const [categoriesRes, suppliersRes] = await Promise.all([
+        supabase.from('categories').select('*'),
+        supabase.from('suppliers').select('*')
+      ]);
+      
+      if (categoriesRes.error) throw categoriesRes.error;
+      if (suppliersRes.error) throw suppliersRes.error;
+      
+      setCategories(categoriesRes.data || []);
+      setSuppliers(suppliersRes.data || []);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    }
+  };
 
   useEffect(() => {
     if (product) {
       setFormData({
         name: product.name,
-        description: product.description,
+        description: product.description || '',
         price: product.price.toString(),
         stock: product.stock.toString(),
-        category: product.category,
-        supplier: product.supplier,
-        image: product.image
+        category_id: product.category_id || '',
+        supplier_id: product.supplier_id || '',
+        image_url: product.image_url || ''
       });
     } else {
       setFormData({
@@ -50,17 +87,17 @@ export default function ProductForm({ isOpen, onClose, product, onSave }: Produc
         description: '',
         price: '',
         stock: '',
-        category: '',
-        supplier: '',
-        image: ''
+        category_id: '',
+        supplier_id: '',
+        image_url: ''
       });
     }
   }, [product]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.price || !formData.stock || !formData.category || !formData.supplier) {
+    if (!formData.name || !formData.price || !formData.stock || !formData.category_id || !formData.supplier_id) {
       toast({
         title: "Error",
         description: "Please fill in all required fields.",
@@ -71,30 +108,50 @@ export default function ProductForm({ isOpen, onClose, product, onSave }: Produc
 
     const productData = {
       name: formData.name,
-      description: formData.description,
+      description: formData.description || null,
       price: parseFloat(formData.price),
       stock: parseInt(formData.stock),
-      category: formData.category,
-      supplier: formData.supplier,
-      image: formData.image || 'https://via.placeholder.com/300x200'
+      category_id: formData.category_id || null,
+      supplier_id: formData.supplier_id || null,
+      image_url: formData.image_url || null
     };
 
-    if (product) {
-      localStorageService.updateProduct(product.id, productData);
+    try {
+      if (product) {
+        const { error } = await supabase
+          .from('products')
+          .update(productData)
+          .eq('id', product.id);
+        
+        if (error) throw error;
+        
+        toast({
+          title: "Product Updated",
+          description: "Product has been updated successfully.",
+        });
+      } else {
+        const { error } = await supabase
+          .from('products')
+          .insert(productData);
+        
+        if (error) throw error;
+        
+        toast({
+          title: "Product Added",
+          description: "Product has been added successfully.",
+        });
+      }
+
+      onSave();
+      onClose();
+    } catch (error) {
+      console.error('Error saving product:', error);
       toast({
-        title: "Product Updated",
-        description: "Product has been updated successfully.",
-      });
-    } else {
-      localStorageService.addProduct(productData);
-      toast({
-        title: "Product Added",
-        description: "Product has been added successfully.",
+        title: "Error",
+        description: "Failed to save product.",
+        variant: "destructive",
       });
     }
-
-    onSave();
-    onClose();
   };
 
   return (
@@ -149,13 +206,13 @@ export default function ProductForm({ isOpen, onClose, product, onSave }: Produc
 
           <div>
             <Label htmlFor="category">Category *</Label>
-            <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
+            <Select value={formData.category_id} onValueChange={(value) => setFormData({ ...formData, category_id: value })}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a category" />
               </SelectTrigger>
               <SelectContent>
                 {categories.map(category => (
-                  <SelectItem key={category.id} value={category.name}>{category.name}</SelectItem>
+                  <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -163,13 +220,13 @@ export default function ProductForm({ isOpen, onClose, product, onSave }: Produc
 
           <div>
             <Label htmlFor="supplier">Supplier *</Label>
-            <Select value={formData.supplier} onValueChange={(value) => setFormData({ ...formData, supplier: value })}>
+            <Select value={formData.supplier_id} onValueChange={(value) => setFormData({ ...formData, supplier_id: value })}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a supplier" />
               </SelectTrigger>
               <SelectContent>
                 {suppliers.map(supplier => (
-                  <SelectItem key={supplier.id} value={supplier.name}>{supplier.name}</SelectItem>
+                  <SelectItem key={supplier.id} value={supplier.id}>{supplier.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -180,8 +237,8 @@ export default function ProductForm({ isOpen, onClose, product, onSave }: Produc
             <Input
               id="image"
               type="url"
-              value={formData.image}
-              onChange={(e) => setFormData({ ...formData, image: e.target.value })}
+              value={formData.image_url}
+              onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
               placeholder="https://example.com/image.jpg"
             />
           </div>

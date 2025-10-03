@@ -4,8 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Supplier, localStorageService } from '@/services/localStorageService';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+
+interface Supplier {
+  id: string;
+  name: string;
+  email?: string;
+  contact: string;
+  address?: string;
+}
 
 interface SupplierFormProps {
   isOpen: boolean;
@@ -18,7 +26,7 @@ export default function SupplierForm({ isOpen, onClose, supplier, onSave }: Supp
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    phone: '',
+    contact: '',
     address: ''
   });
 
@@ -26,59 +34,88 @@ export default function SupplierForm({ isOpen, onClose, supplier, onSave }: Supp
     if (supplier) {
       setFormData({
         name: supplier.name,
-        email: supplier.email,
-        phone: supplier.phone,
-        address: supplier.address
+        email: supplier.email || '',
+        contact: supplier.contact,
+        address: supplier.address || ''
       });
     } else {
       setFormData({
         name: '',
         email: '',
-        phone: '',
+        contact: '',
         address: ''
       });
     }
   }, [supplier]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name.trim() || !formData.email.trim() || !formData.phone.trim()) {
+    if (!formData.name.trim() || !formData.contact.trim()) {
       toast({
         title: "Error",
-        description: "Name, email, and phone are required fields.",
+        description: "Name and contact are required fields.",
         variant: "destructive"
       });
       return;
     }
 
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
+    // Basic email validation if provided
+    if (formData.email && formData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email)) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid email address.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
+    const supplierData = {
+      name: formData.name,
+      email: formData.email || null,
+      contact: formData.contact,
+      address: formData.address || null
+    };
+
+    try {
+      if (supplier) {
+        const { error } = await supabase
+          .from('suppliers')
+          .update(supplierData)
+          .eq('id', supplier.id);
+        
+        if (error) throw error;
+        
+        toast({
+          title: "Supplier Updated",
+          description: "Supplier has been updated successfully.",
+        });
+      } else {
+        const { error } = await supabase
+          .from('suppliers')
+          .insert(supplierData);
+        
+        if (error) throw error;
+        
+        toast({
+          title: "Supplier Added",
+          description: "Supplier has been added successfully.",
+        });
+      }
+
+      onSave();
+      onClose();
+    } catch (error) {
+      console.error('Error saving supplier:', error);
       toast({
         title: "Error",
-        description: "Please enter a valid email address.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (supplier) {
-      localStorageService.updateSupplier(supplier.id, formData);
-      toast({
-        title: "Supplier Updated",
-        description: "Supplier has been updated successfully.",
-      });
-    } else {
-      localStorageService.addSupplier(formData);
-      toast({
-        title: "Supplier Added",
-        description: "Supplier has been added successfully.",
+        description: "Failed to save supplier.",
+        variant: "destructive",
       });
     }
-
-    onSave();
-    onClose();
   };
 
   return (
@@ -99,23 +136,22 @@ export default function SupplierForm({ isOpen, onClose, supplier, onSave }: Supp
           </div>
 
           <div>
-            <Label htmlFor="email">Email *</Label>
+            <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              required
             />
           </div>
 
           <div>
-            <Label htmlFor="phone">Phone *</Label>
+            <Label htmlFor="contact">Contact *</Label>
             <Input
-              id="phone"
+              id="contact"
               type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              value={formData.contact}
+              onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
               required
             />
           </div>

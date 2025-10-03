@@ -4,8 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Category, localStorageService } from '@/services/localStorageService';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+
+interface Category {
+  id: string;
+  name: string;
+  description?: string;
+}
 
 interface CategoryFormProps {
   isOpen: boolean;
@@ -24,7 +30,7 @@ export default function CategoryForm({ isOpen, onClose, category, onSave }: Cate
     if (category) {
       setFormData({
         name: category.name,
-        description: category.description
+        description: category.description || ''
       });
     } else {
       setFormData({
@@ -34,7 +40,7 @@ export default function CategoryForm({ isOpen, onClose, category, onSave }: Cate
     }
   }, [category]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name.trim()) {
@@ -46,22 +52,47 @@ export default function CategoryForm({ isOpen, onClose, category, onSave }: Cate
       return;
     }
 
-    if (category) {
-      localStorageService.updateCategory(category.id, formData);
+    const categoryData = {
+      name: formData.name,
+      description: formData.description || null
+    };
+
+    try {
+      if (category) {
+        const { error } = await supabase
+          .from('categories')
+          .update(categoryData)
+          .eq('id', category.id);
+        
+        if (error) throw error;
+        
+        toast({
+          title: "Category Updated",
+          description: "Category has been updated successfully.",
+        });
+      } else {
+        const { error } = await supabase
+          .from('categories')
+          .insert(categoryData);
+        
+        if (error) throw error;
+        
+        toast({
+          title: "Category Added",
+          description: "Category has been added successfully.",
+        });
+      }
+
+      onSave();
+      onClose();
+    } catch (error) {
+      console.error('Error saving category:', error);
       toast({
-        title: "Category Updated",
-        description: "Category has been updated successfully.",
-      });
-    } else {
-      localStorageService.addCategory(formData);
-      toast({
-        title: "Category Added",
-        description: "Category has been added successfully.",
+        title: "Error",
+        description: "Failed to save category.",
+        variant: "destructive",
       });
     }
-
-    onSave();
-    onClose();
   };
 
   return (

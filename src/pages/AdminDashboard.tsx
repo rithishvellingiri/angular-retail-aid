@@ -5,21 +5,65 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Package, Users, ShoppingCart, AlertTriangle, Plus, Edit, Trash2, History } from 'lucide-react';
-import { localStorageService, Product, Category, Supplier, HistoryEntry, Order } from '@/services/localStorageService';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import ProductForm from '@/components/ProductForm';
 import CategoryForm from '@/components/CategoryForm';
 import SupplierForm from '@/components/SupplierForm';
+import { supabase } from '@/integrations/supabase/client';
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  description?: string;
+  category_id?: string;
+  supplier_id?: string;
+  image_url?: string;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+interface Supplier {
+  id: string;
+  name: string;
+  email?: string;
+  contact: string;
+  address?: string;
+}
+
+interface HistoryEntry {
+  id: string;
+  user_id: string;
+  user_name: string;
+  type: string;
+  action: string;
+  details: string;
+  created_at: string;
+}
+
+interface Order {
+  id: string;
+  user_id: string;
+  total: number;
+  status: string;
+  payment_status: string;
+  payment_id?: string;
+  created_at: string;
+}
 
 export default function AdminDashboard() {
-  const { isAdmin } = useAuth();
-  const [stats, setStats] = useState<any>({});
+  const { user, isAuthenticated } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   
   // Form states
@@ -36,51 +80,103 @@ export default function AdminDashboard() {
       return;
     }
 
-    localStorageService.initialize();
     loadData();
   }, [isAdmin]);
 
-  const loadData = () => {
-    const storeStats = localStorageService.getStats();
-    setStats(storeStats);
-    setProducts(localStorageService.getProducts());
-    setCategories(localStorageService.getCategories());
-    setSuppliers(localStorageService.getSuppliers());
-    setHistory(localStorageService.getHistory());
-    setLowStockProducts(storeStats.lowStockItems);
-    setOrders(localStorageService.getOrders());
+  const loadData = async () => {
+    try {
+      const [productsRes, categoriesRes, suppliersRes, historyRes, ordersRes] = await Promise.all([
+        supabase.from('products').select('*'),
+        supabase.from('categories').select('*'),
+        supabase.from('suppliers').select('*'),
+        supabase.from('history').select('*').order('created_at', { ascending: false }),
+        supabase.from('orders').select('*').order('created_at', { ascending: false })
+      ]);
+
+      if (productsRes.error) throw productsRes.error;
+      if (categoriesRes.error) throw categoriesRes.error;
+      if (suppliersRes.error) throw suppliersRes.error;
+      if (historyRes.error) throw historyRes.error;
+      if (ordersRes.error) throw ordersRes.error;
+
+      setProducts(productsRes.data || []);
+      setCategories(categoriesRes.data || []);
+      setSuppliers(suppliersRes.data || []);
+      setHistory(historyRes.data || []);
+      setOrders(ordersRes.data || []);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load data.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const deleteProduct = (id: string) => {
+  const deleteProduct = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
-      localStorageService.deleteProduct(id);
-      loadData();
-      toast({
-        title: "Product Deleted",
-        description: "Product has been removed successfully.",
-      });
+      try {
+        const { error } = await supabase.from('products').delete().eq('id', id);
+        if (error) throw error;
+        
+        loadData();
+        toast({
+          title: "Product Deleted",
+          description: "Product has been removed successfully.",
+        });
+      } catch (error) {
+        console.error('Error deleting product:', error);
+        toast({
+          title: "Error",
+          description: "Failed to delete product.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
-  const deleteCategory = (id: string) => {
+  const deleteCategory = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this category?')) {
-      localStorageService.deleteCategory(id);
-      loadData();
-      toast({
-        title: "Category Deleted",
-        description: "Category has been removed successfully.",
-      });
+      try {
+        const { error } = await supabase.from('categories').delete().eq('id', id);
+        if (error) throw error;
+        
+        loadData();
+        toast({
+          title: "Category Deleted",
+          description: "Category has been removed successfully.",
+        });
+      } catch (error) {
+        console.error('Error deleting category:', error);
+        toast({
+          title: "Error",
+          description: "Failed to delete category.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
-  const deleteSupplier = (id: string) => {
+  const deleteSupplier = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this supplier?')) {
-      localStorageService.deleteSupplier(id);
-      loadData();
-      toast({
-        title: "Supplier Deleted",
-        description: "Supplier has been removed successfully.",
-      });
+      try {
+        const { error } = await supabase.from('suppliers').delete().eq('id', id);
+        if (error) throw error;
+        
+        loadData();
+        toast({
+          title: "Supplier Deleted",
+          description: "Supplier has been removed successfully.",
+        });
+      } catch (error) {
+        console.error('Error deleting supplier:', error);
+        toast({
+          title: "Error",
+          description: "Failed to delete supplier.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -112,6 +208,14 @@ export default function AdminDashboard() {
   const handleCloseSupplierForm = () => {
     setShowSupplierForm(false);
     setEditingSupplier(undefined);
+  };
+
+  const lowStockProducts = products.filter(p => p.stock < 10);
+  const stats = {
+    products: products.length,
+    orders: orders.length,
+    users: 0, // We don't track this
+    lowStockProducts: lowStockProducts.length
   };
 
   if (!isAdmin) {
@@ -210,14 +314,14 @@ export default function AdminDashboard() {
                 ) : (
                   <div className="space-y-4">
                     {orders
-                      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                       .map(order => (
                       <div key={order.id} className="border rounded-lg p-4">
                         <div className="flex justify-between items-start mb-4">
                           <div>
-                            <h3 className="font-semibold">Order #{order.id}</h3>
+                            <h3 className="font-semibold">Order #{order.id.slice(0, 8)}</h3>
                             <p className="text-sm text-muted-foreground">
-                              User ID: {order.userId} • {new Date(order.createdAt).toLocaleDateString()}
+                              User ID: {order.user_id.slice(0, 8)} • {new Date(order.created_at).toLocaleDateString()}
                             </p>
                           </div>
                           <div className="text-right">
@@ -226,23 +330,15 @@ export default function AdminDashboard() {
                               <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
                                 {order.status}
                               </Badge>
-                              <Badge variant={order.paymentStatus === 'completed' ? 'default' : 'secondary'}>
-                                {order.paymentStatus}
+                              <Badge variant={order.payment_status === 'completed' ? 'default' : 'secondary'}>
+                                {order.payment_status}
                               </Badge>
                             </div>
                           </div>
                         </div>
-                        <div className="space-y-2">
-                          {order.items.map((item, index) => (
-                            <div key={index} className="flex justify-between text-sm">
-                              <span>{item.productName} × {item.quantity}</span>
-                              <span>₹{item.price * item.quantity}</span>
-                            </div>
-                          ))}
-                        </div>
-                        {order.paymentId && (
+                        {order.payment_id && (
                           <p className="text-xs text-muted-foreground mt-2">
-                            Payment ID: {order.paymentId}
+                            Payment ID: {order.payment_id}
                           </p>
                         )}
                       </div>
@@ -268,7 +364,10 @@ export default function AdminDashboard() {
                     <div key={product.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex-1">
                         <h3 className="font-semibold">{product.name}</h3>
-                        <p className="text-sm text-muted-foreground">{product.category} • {product.supplier}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {categories.find(c => c.id === product.category_id)?.name || 'N/A'} • 
+                          {suppliers.find(s => s.id === product.supplier_id)?.name || 'N/A'}
+                        </p>
                         <p className="text-lg font-bold text-primary">₹{product.price}</p>
                       </div>
                       <div className="flex items-center space-x-4">
@@ -346,7 +445,7 @@ export default function AdminDashboard() {
                     <div key={supplier.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div>
                         <h3 className="font-semibold">{supplier.name}</h3>
-                        <p className="text-sm text-muted-foreground">{supplier.email} • {supplier.phone}</p>
+                        <p className="text-sm text-muted-foreground">{supplier.email} • {supplier.contact}</p>
                         <p className="text-sm text-muted-foreground">{supplier.address}</p>
                       </div>
                       <div className="flex space-x-2">
@@ -389,12 +488,12 @@ export default function AdminDashboard() {
                           <div>
                             <h3 className="font-semibold">{entry.action}</h3>
                             <p className="text-sm text-muted-foreground">{entry.details}</p>
-                            <p className="text-sm text-muted-foreground">User: {entry.userName}</p>
+                            <p className="text-sm text-muted-foreground">User: {entry.user_name}</p>
                           </div>
                           <Badge variant="outline">{entry.type}</Badge>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {new Date(entry.createdAt).toLocaleString()}
+                          {new Date(entry.created_at).toLocaleString()}
                         </p>
                       </div>
                     ))
