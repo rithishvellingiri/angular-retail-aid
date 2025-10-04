@@ -3,12 +3,46 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar, Package, CreditCard, MessageSquare } from 'lucide-react';
-import { localStorageService, Order, HistoryEntry, Feedback } from '@/services/localStorageService';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from '@/hooks/use-toast';
+
+interface OrderItem {
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  price: number;
+}
+
+interface Order {
+  id: string;
+  total: number;
+  status: string;
+  payment_status: string;
+  payment_id?: string;
+  created_at: string;
+}
+
+interface HistoryEntry {
+  id: string;
+  action: string;
+  details: string;
+  type: string;
+  created_at: string;
+}
+
+interface Feedback {
+  id: string;
+  message: string;
+  status: string;
+  admin_response?: string;
+  created_at: string;
+}
 
 export default function UserDashboard() {
   const { user, isAuthenticated } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [orderItems, setOrderItems] = useState<Record<string, OrderItem[]>>({});
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
 
@@ -18,17 +52,72 @@ export default function UserDashboard() {
       return;
     }
 
-    localStorageService.initialize();
-    const allOrders = localStorageService.getOrders();
-    const userOrders = allOrders.filter(order => order.userId === user!.id);
-    setOrders(userOrders);
-
-    setHistory(localStorageService.getUserHistory(user!.id));
-    
-    const allFeedback = localStorageService.getFeedback();
-    const userFeedback = allFeedback.filter(f => f.userId === user!.id);
-    setFeedback(userFeedback);
+    loadData();
   }, [user, isAuthenticated]);
+
+  const loadData = async () => {
+    if (!user) return;
+
+    try {
+      // Load orders
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      
+      if (ordersError) throw ordersError;
+      setOrders(ordersData || []);
+
+      // Load order items for each order
+      if (ordersData && ordersData.length > 0) {
+        const orderIds = ordersData.map(o => o.id);
+        const { data: itemsData, error: itemsError } = await supabase
+          .from('order_items')
+          .select('*')
+          .in('order_id', orderIds);
+        
+        if (itemsError) throw itemsError;
+        
+        // Group items by order_id
+        const itemsByOrder: Record<string, OrderItem[]> = {};
+        itemsData?.forEach(item => {
+          if (!itemsByOrder[item.order_id]) {
+            itemsByOrder[item.order_id] = [];
+          }
+          itemsByOrder[item.order_id].push(item);
+        });
+        setOrderItems(itemsByOrder);
+      }
+
+      // Load history
+      const { data: historyData, error: historyError } = await supabase
+        .from('history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      
+      if (historyError) throw historyError;
+      setHistory(historyData || []);
+
+      // Load feedback
+      const { data: feedbackData, error: feedbackError } = await supabase
+        .from('feedback')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      
+      if (feedbackError) throw feedbackError;
+      setFeedback(feedbackData || []);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load dashboard data.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -138,7 +227,7 @@ export default function UserDashboard() {
                           <div>
                             <h3 className="font-semibold">Order #{order.id}</h3>
                             <p className="text-sm text-muted-foreground">
-                              {new Date(order.createdAt).toLocaleDateString()}
+                              {new Date(order.created_at).toLocaleDateString()}
                             </p>
                           </div>
                           <div className="text-right">
@@ -147,23 +236,23 @@ export default function UserDashboard() {
                               <Badge variant={getStatusColor(order.status)}>
                                 {order.status}
                               </Badge>
-                              <Badge variant={getPaymentStatusColor(order.paymentStatus)}>
-                                {order.paymentStatus}
+                              <Badge variant={getPaymentStatusColor(order.payment_status)}>
+                                {order.payment_status}
                               </Badge>
                             </div>
                           </div>
                         </div>
                         <div className="space-y-2">
-                          {order.items.map((item, index) => (
+                          {(orderItems[order.id] || []).map((item, index) => (
                             <div key={index} className="flex justify-between text-sm">
-                              <span>{item.productName} × {item.quantity}</span>
+                              <span>{item.product_name} × {item.quantity}</span>
                               <span>₹{item.price * item.quantity}</span>
                             </div>
                           ))}
                         </div>
-                        {order.paymentId && (
+                        {order.payment_id && (
                           <p className="text-xs text-muted-foreground mt-2">
-                            Payment ID: {order.paymentId}
+                            Payment ID: {order.payment_id}
                           </p>
                         )}
                       </div>
@@ -189,25 +278,19 @@ export default function UserDashboard() {
                     {feedback.map(item => (
                       <div key={item.id} className="border rounded-lg p-4">
                         <div className="flex justify-between items-start mb-2">
-                          <h3 className="font-semibold">{item.subject}</h3>
                           <Badge variant={item.status === 'replied' ? 'default' : 'secondary'}>
                             {item.status}
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground mb-2">{item.message}</p>
-                        {item.productName && (
-                          <p className="text-xs text-muted-foreground mb-2">
-                            Product: {item.productName}
-                          </p>
-                        )}
-                        {item.reply && (
+                        {item.admin_response && (
                           <div className="bg-muted p-3 rounded mt-3">
                             <p className="text-sm font-medium">Reply:</p>
-                            <p className="text-sm">{item.reply}</p>
+                            <p className="text-sm">{item.admin_response}</p>
                           </div>
                         )}
                         <p className="text-xs text-muted-foreground mt-2">
-                          {new Date(item.createdAt).toLocaleDateString()}
+                          {new Date(item.created_at).toLocaleDateString()}
                         </p>
                       </div>
                     ))}
@@ -238,9 +321,9 @@ export default function UserDashboard() {
                           </div>
                           <Badge variant="outline">{entry.type}</Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {new Date(entry.createdAt).toLocaleString()}
-                        </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {new Date(entry.created_at).toLocaleString()}
+                          </p>
                       </div>
                     ))}
                   </div>
