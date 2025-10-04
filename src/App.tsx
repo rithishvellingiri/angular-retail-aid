@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { Header } from "@/components/Header";
-import Chatbot from "@/components/Chatbot";
+import ChatbotWidget from "@/components/ChatbotWidget";
 import { Home } from "@/pages/Home";
 import { Login } from "@/pages/Login";
 import { Register } from "@/pages/Register";
@@ -48,7 +48,7 @@ const App = () => {
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </main>
-              <Chatbot />
+              <ChatbotWidget />
             </div>
           </AuthProvider>
         </BrowserRouter>
