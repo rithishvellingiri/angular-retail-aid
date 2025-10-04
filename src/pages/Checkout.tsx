@@ -38,7 +38,6 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showUPIModal, setShowUPIModal] = useState(false);
-  const [completedOrderId, setCompletedOrderId] = useState<string | null>(null);
 
   // Load data on mount
   useEffect(() => {
@@ -246,15 +245,6 @@ export default function Checkout() {
         description: "Your order has been placed successfully.",
       });
 
-      // Set completed order ID and redirect after 2 seconds
-      setCompletedOrderId(orderData.id);
-      console.log('📍 Order completed, redirecting in 2 seconds...');
-      
-      setTimeout(() => {
-        console.log('🚀 Redirecting to user dashboard...');
-        navigate('/user');
-      }, 2000);
-
       setLoading(false);
     } catch (error) {
       console.error('Order processing error:', error);
@@ -398,30 +388,6 @@ export default function Checkout() {
 
   if (!isAuthenticated) {
     return null;
-  }
-
-  // Show success message if order is completed
-  if (completedOrderId) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="max-w-md mx-auto text-center p-8">
-          <div className="mb-4">
-            <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-          </div>
-          <CardTitle className="text-2xl font-bold mb-2">Payment Successful!</CardTitle>
-          <p className="text-muted-foreground mb-4">
-            Your order has been placed successfully. Redirecting to your dashboard...
-          </p>
-          <div className="flex justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        </Card>
-      </div>
-    );
   }
 
   return (
